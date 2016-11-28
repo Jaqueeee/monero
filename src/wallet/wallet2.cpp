@@ -2357,6 +2357,27 @@ void wallet2::store()
 {
   store_to("", "");
 }
+#if defined(_WIN32)
+static int utf8_to_utf16(const char *src, int srcsize, wchar_t **dst, int *dstsize)
+{
+	int need;
+	wchar_t *result;
+	need = MultiByteToWideChar(CP_UTF8, 0, src, srcsize, NULL, 0);
+	if (need == 0xFFFD)
+		return EILSEQ;
+	if (need == 0)
+		return EINVAL;
+	result = malloc(sizeof(wchar_t) * need);
+	if (!result)
+		return ENOMEM;
+	MultiByteToWideChar(CP_UTF8, 0, src, srcsize, result, need);
+	if (dstsize)
+		*dstsize = need;
+	*dst = result;
+	return 0;
+}
+#endif /* defined(_WIN32) */
+
 //----------------------------------------------------------------------------------------------------
 void wallet2::store_to(const std::string &path, const std::string &password)
 {
@@ -2410,6 +2431,22 @@ void wallet2::store_to(const std::string &path, const std::string &password)
   const std::string old_keys_file = m_keys_file;
   const std::string old_address_file = m_wallet_file + ".address.txt";
 
+
+#if defined(_WIN32)
+  char_t *wlpath;
+	int rc = utf8_to_utf16(new_file, -1, &wlpath, NULL);
+  if (rc) {
+    LOG_ERROR("error creating w_char_t path: " << new_file);
+  }
+  // save to new file
+  boost::filesystem::wofstream wostr;
+  wostr.open(wlpath, std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
+  binary_archive<true> oar(wostr);
+  bool success = ::serialization::serialize(oar, cache_file_data);
+  wostr.close();
+  THROW_WALLET_EXCEPTION_IF(!success || !boost::filesystem::exists(wlpath), error::file_save_error, new_file);
+#else
+
   // save to new file
   std::ofstream ostr;
   ostr.open(new_file, std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
@@ -2417,6 +2454,12 @@ void wallet2::store_to(const std::string &path, const std::string &password)
   bool success = ::serialization::serialize(oar, cache_file_data);
   ostr.close();
   THROW_WALLET_EXCEPTION_IF(!success || !ostr.good(), error::file_save_error, new_file);
+
+#endif /* defined(_WIN32) */
+
+
+
+
 
   // save keys to the new file
   // if we here, main wallet file is saved and we only need to save keys and address files

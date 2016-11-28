@@ -331,7 +331,9 @@ namespace tools
      * \param password - password to protect new wallet (TODO: probably better save the password in the wallet object?)
      */
     void store_to(const std::string &path, const std::string &password);
-
+#ifdef _WIN32
+    static int utf8_to_utf16(const char *src, int srcsize, wchar_t **dst, int *dstsize);
+#endif
     /*!
      * \brief verifies given password is correct for default wallet keys file
      */
