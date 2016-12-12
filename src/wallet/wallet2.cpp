@@ -1568,14 +1568,26 @@ bool wallet2::add_address_book_row(const cryptonote::account_public_address &add
   a.m_address = address;
   a.m_payment_id = payment_id;
   a.m_description = description;
-  
-  int key = (m_address_book.empty())? 0 : m_address_book.rbegin()->first;
-  bool r =  m_address_book.emplace(++key,a).second;
+  bool r =  m_address_book.emplace(m_address_book.size(),a).second;
   return r;
 }
 
 bool wallet2::delete_address_book_row(int row_id) {
-  return (m_address_book.erase(row_id) > 0);
+
+  // When deleting a row we need to rebuild map with continuous row_id sequence.
+  std::map<int, address_book_row> new_address_book;
+  int key = 0;
+  for (auto const &a: m_address_book) {
+    if(a.first != row_id)
+      new_address_book.emplace(key++,a.second);
+  }
+
+  // Check if 1 row is deleted.
+  if (new_address_book.size() == m_address_book.size() - 1) {
+    m_address_book = new_address_book;
+    return true;
+  }
+  return false;
 }
 
 //----------------------------------------------------------------------------------------------------
