@@ -30,6 +30,8 @@
 
 #include <assert.h>
 #include <stdint.h>
+#include <stdio.h>
+
 
 #include "warnings.h"
 #include "crypto-ops.h"
@@ -1241,7 +1243,8 @@ int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
   fe v;
   fe vxx;
   fe check;
-
+  // MDEBUG(__FUNCTION__);
+  // printf(s);
   /* From fe_frombytes.c */
 
   int64_t h0 = load_4(s);
@@ -1269,6 +1272,7 @@ int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
   if (h9 == 33554428 && h8 == 268435440 && h7 == 536870880 && h6 == 2147483520 &&
     h5 == 4294967295 && h4 == 67108860 && h3 == 134217720 && h2 == 536870880 &&
     h1 == 1073741760 && h0 >= 4294967277) {
+    printf(__LINE__);
     return -1;
   }
 
@@ -1311,6 +1315,7 @@ int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
   if (fe_isnonzero(check)) {
     fe_add(check, vxx, u);  /* vx^2+u */
     if (fe_isnonzero(check)) {
+            printf(__LINE__);
       return -1;
     }
     fe_mul(h->X, h->X, fe_sqrtm1);
@@ -1319,6 +1324,7 @@ int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
   if (fe_isnegative(h->X) != (s[31] >> 7)) {
     /* If x = 0, the sign must be positive */
     if (!fe_isnonzero(h->X)) {
+            printf(__LINE__);
       return -1;
     }
     fe_neg(h->X, h->X);

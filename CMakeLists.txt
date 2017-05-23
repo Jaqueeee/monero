@@ -325,6 +325,8 @@ if (APPLE AND NOT IOS)
   endif()
 endif()
 
+include_directories(/usr/local/opt/openssl/include)
+
 find_package(OpenSSL REQUIRED)
 if(STATIC AND NOT IOS)
   if(UNIX)

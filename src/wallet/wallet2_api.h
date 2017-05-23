@@ -359,9 +359,13 @@ struct Wallet
      *
      * \param daemon_address - daemon address in "hostname:port" format
      * \param upper_transaction_size_limit
+     * \param daemon_username
+     * \param daemon_password
+     * \param lightWallet - start wallet in light mode, connect to a openmonero compatible server.
+     * \param lightWalletNewAddress - true if lightwallet node haven't seen the address before.
      * \return  - true on success
      */
-    virtual bool init(const std::string &daemon_address, uint64_t upper_transaction_size_limit, const std::string &daemon_username = "", const std::string &daemon_password = "") = 0;
+    virtual bool init(const std::string &daemon_address, uint64_t upper_transaction_size_limit, const std::string &daemon_username = "", const std::string &daemon_password = "", bool lightWallet = false, bool lightWalletNewAddress = false) = 0;
 
    /*!
     * \brief createWatchOnly - Creates a watch only wallet
@@ -594,6 +598,9 @@ struct Wallet
     * \return true on success
     */
     virtual bool rescanSpent() = 0;
+    
+    //! Initiates a light wallet import wallet request
+    virtual bool lightWalletImportWalletRequest(std::string &payment_id, uint64_t fee, bool new_request, bool request_fulfilled, std::string &payment_address, std::string &status) = 0;
 };
 
 /**
@@ -724,6 +731,7 @@ struct WalletManager
 
     //! checks for an update and returns version, hash and url
     static std::tuple<bool, std::string, std::string, std::string, std::string> checkUpdates(const std::string &software, const std::string &subdir);
+  
 };
 
 

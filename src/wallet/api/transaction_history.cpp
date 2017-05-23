@@ -108,7 +108,102 @@ void TransactionHistoryImpl::refresh()
     for (auto t : m_history)
         delete t;
     m_history.clear();
+    
+    
+    /*
+    // MYMONERO start
+    
+    
+    epee::net_utils::http::http_simple_client client{};
+    client.set_server("https://api.mymonero.com:8443", boost::none);
+    
+    cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_TXS::request ireq;
+    cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_TXS::response ires;
+    
+    ireq.address = "45gpDrTUmSs7byv4P5WBYqbixcGKsrAooTKDfAxmUCpbGmhZaF5V7s2UBb8oKAGZcvAU2C94K14XD4XghTFWQrRj2Ni1ZrY";
+    ireq.view_key = "628a7d879a6af9f79e8eca060502953678afe174e8a2a8e32c9ebc40cb0ac10a";
+    // boost::string_ref method = "POST";
+    if (epee::net_utils::invoke_http_ssl_json("/get_address_txs", ireq, ires, client, std::chrono::seconds(30), "POST")) {
 
+  
+      MDEBUG("MYMONERO!");
+      MDEBUG(ires.total_received);
+      
+      uint64_t total_received, total_sent;
+      for (const auto &t: ires.transactions) {
+        // ti->m_transfers.push_back({d.amount, get_account_address_as_str(m_wallet->m_wallet->testnet(), d.addr)});
+          
+        // ti->m_paymentid = payment_id;
+        total_received = boost::lexical_cast<uint64_t>(t.total_received);
+        total_sent = boost::lexical_cast<uint64_t>(t.total_sent);
+          
+        // Check key image
+        for(const auto &so: t.spent_outputs)
+        {
+          
+          // generate ephemeral secret key
+          crypto::key_image calculated_key_image;
+          cryptonote::keypair in_ephemeral;
+          crypto::public_key tx_public_key = AUTO_VAL_INIT(tx_public_key);
+          string_tools::hex_to_pod(so.tx_pub_key, tx_public_key);
+            
+          cryptonote::generate_key_image_helper(m_wallet->m_wallet->get_account().get_keys(), tx_public_key, so.out_index, in_ephemeral, calculated_key_image);
+          
+          // mm key image;
+          crypto::key_image key_image;
+          string_tools::hex_to_pod(so.key_image, key_image);
+          
+          
+          std::string calculated_key_image_str =  string_tools::pod_to_hex(calculated_key_image);
+          
+          
+          // MDEBUG("Spent amount: " << so.amount << " " << so.tx_pub_key);
+          // MDEBUG("Key image: " << so.key_image);
+          // MDEBUG("Calculated key image: " << calculated_key_image_str);
+          
+          if(key_image != calculated_key_image){
+            // MDEBUG("Key images doesnt match");
+            total_sent -= boost::lexical_cast<uint64_t>(so.amount);
+          }
+        }
+        
+        // Do not add tx if empty. 
+        if(total_sent == 0 && total_received == 0)
+          continue;
+        
+        TransactionInfoImpl * ti = new TransactionInfoImpl();
+        if(total_received > total_sent) {
+          ti->m_amount    = total_received - total_sent;
+          ti->m_direction = TransactionInfo::Direction_In;            
+        } else {
+          ti->m_amount    = total_sent - total_received;
+          ti->m_direction = TransactionInfo::Direction_Out;  
+        }
+        ti->m_hash      = t.hash;
+        ti->m_blockheight = t.height;
+        
+        // Parse timestamp
+        std::tm tm = {};
+        std::istringstream ss(t.timestamp);
+        if (ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S"))
+          ti->m_timestamp = std::mktime(&tm);
+        else
+          MERROR("Could'nt parse date " << t.timestamp);
+        ti->m_paymentid = t.payment_id;
+        ti->m_confirmations = ires.blockchain_height - t.height;
+        m_history.push_back(ti);
+          
+      }
+
+      
+      
+      // MDEBUG(ires.transactions);
+    } else {
+      MDEBUG("MM FAILED!");
+    }
+    
+    
+    // return;*/
     // transactions are stored in wallet2:
     // - confirmed_transfer_details   - out transfers
     // - unconfirmed_transfer_details - pending out transfers
@@ -134,10 +229,6 @@ void TransactionHistoryImpl::refresh()
         ti->m_confirmations = wallet_height - pd.m_block_height;
         m_history.push_back(ti);
 
-        /* output.insert(std::make_pair(pd.m_block_height, std::make_pair(true, (boost::format("%20.20s %s %s %s")
-                                                                                 % print_money(pd.m_amount)
-                                                                                 % string_tools::pod_to_hex(pd.m_tx_hash)
-                                                                                 % payment_id % "-").str()))); */
     }
 
     // confirmed output transactions

@@ -75,6 +75,10 @@ boost::optional<std::string> NodeRPCProxy::get_rpc_version(uint32_t &rpc_version
     m_daemon_rpc_mutex.lock();
     bool r = net_utils::invoke_http_json("/json_rpc", req_t, resp_t, m_http_client, rpc_timeout);
     m_daemon_rpc_mutex.unlock();
+    if(!r) { //TODO: fix lightwallet version
+      rpc_version = MAKE_CORE_RPC_VERSION(1, 7);
+      return boost::optional<std::string>();
+    }
     CHECK_AND_ASSERT_MES(r, std::string(), "Failed to connect to daemon");
     CHECK_AND_ASSERT_MES(resp_t.result.status != CORE_RPC_STATUS_BUSY, resp_t.result.status, "Failed to connect to daemon");
     CHECK_AND_ASSERT_MES(resp_t.result.status == CORE_RPC_STATUS_OK, resp_t.result.status, "Failed to get daemon RPC version");
@@ -95,6 +99,11 @@ boost::optional<std::string> NodeRPCProxy::get_height(uint64_t &height)
     m_daemon_rpc_mutex.lock();
     bool r = net_utils::invoke_http_json("/getheight", req, res, m_http_client, rpc_timeout);
     m_daemon_rpc_mutex.unlock();
+    if(!r) { //TODO: fix lightwallet version
+      height = 1306581;
+      return boost::optional<std::string>();
+    }
+    
     CHECK_AND_ASSERT_MES(r, std::string(), "Failed to connect to daemon");
     CHECK_AND_ASSERT_MES(res.status != CORE_RPC_STATUS_BUSY, res.status, "Failed to connect to daemon");
     CHECK_AND_ASSERT_MES(res.status == CORE_RPC_STATUS_OK, res.status, "Failed to get current blockchain height");

@@ -32,6 +32,8 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/optional/optional.hpp>
 #include <boost/utility/string_ref.hpp>
+#include <boost/asio.hpp>
+#include <boost/asio/ssl.hpp>
 //#include <mbstring.h>
 #include <algorithm>
 #include <cctype>
@@ -50,6 +52,7 @@
 #include "http_auth.h"
 #include "to_nonconst_iterator.h"
 #include "net_parse_helpers.h"
+
 
 //#include "shlwapi.h"
 
@@ -372,7 +375,7 @@ using namespace std;
 				//handle "additional_params"
 				for(const auto& field : additional_params)
 					add_field(req_buff, field);
-
+        
 				for (unsigned sends = 0; sends < 2; ++sends)
 				{
 					const std::size_t initial_size = req_buff.size();
@@ -388,7 +391,6 @@ using namespace std;
 					if(body.size())
 						res = m_net_client.send(body, timeout);
 					CHECK_AND_ASSERT_MES(res, false, "HTTP_CLIENT: Failed to SEND");
-
 
 					m_response_info.clear();
 					m_state = reciev_machine_state_header;
@@ -418,6 +420,111 @@ using namespace std;
 				LOG_ERROR("Client has incorrect username/password for server requiring authentication");
 				return false;
 			}
+            
+            
+			//---------------------------------------------------------------------------
+            
+			inline bool invoke_ssl(const boost::string_ref uri, const boost::string_ref method, const std::string& body, std::chrono::milliseconds timeout, const http_response_info** ppresponse_info = NULL, const fields_list& additional_params = fields_list())
+			{
+				CRITICAL_REGION_LOCAL(m_lock);
+				
+                try
+                {
+
+                  boost::asio::io_service io_service;
+
+                  boost::asio::ip::tcp::resolver resolver(io_service);
+                  boost::asio::ip::tcp::resolver::query query(m_host_buff,m_port);
+                  boost::asio::ip::tcp::resolver::iterator iterator = resolver.resolve(query);
+
+                  boost::asio::ssl::context ctx(boost::asio::ssl::context::sslv23);
+                  // ctx.load_verify_file("ca.pem");
+        
+                  // Try each endpoint until we successfully establish a connection.
+                  boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket(io_service, ctx);
+                  boost::system::error_code error = boost::asio::error::host_not_found;
+                  boost::asio::connect(socket.lowest_layer(), iterator);
+                  socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
+                  socket.handshake(boost::asio::ssl::stream_base::client);
+
+                  // Form the request. We specify the "Connection: close" header so that the
+                  // server will close the socket after transmitting the response. This will
+                  // allow us to treat all data up until the EOF as the content.
+        
+                  std::stringstream request_stream;
+                  request_stream << method << " " << uri << " HTTP/1.0\r\n";
+                  request_stream << "Host: " << m_host_buff << "\r\n";
+                  // request_stream << "User-Agent: C/1.0";
+                  request_stream << "Content-Type: application/json; charset=utf-8 \r\n";
+                  request_stream << "Accept: */*\r\n";
+                  request_stream << "Content-Length: " << std::to_string(body.size()) << "\r\n";
+                  request_stream << "Connection: close\r\n\r\n";
+                  if(!body.empty())
+				            request_stream << body;
+                  
+                  // Send the request.
+                  boost::asio::write(socket, boost::asio::buffer(request_stream.str()));
+                 
+
+                  // Read the response status line. The response streambuf will automatically
+                  // grow to accommodate the entire line. The growth may be limited by passing
+                  // a maximum size to the streambuf constructor.
+                  boost::asio::streambuf response;
+        
+        
+                  // Read the response headers, which are terminated by a blank line.
+                  boost::asio::read_until(socket, response, "\r\n\r\n");
+         
+                  // Check that response is OK.
+                  std::istream response_stream(&response);
+                  std::string http_version;
+                  response_stream >> http_version;
+                  unsigned int status_code;
+                  response_stream >> status_code;
+                  std::string status_message;
+                  std::getline(response_stream, status_message);
+        
+                  std::stringstream body;
+                  
+                  // Process the response headers.
+                  std::string header;
+                  // TODO: HANDLE header
+                  while (std::getline(response_stream, header) && header != "\r") {
+                       std::cout << header << "\n";
+                  }
+
+                  m_response_info.m_response_code = 200;
+                  // Write whatever content we already have to output.
+                  if (response.size() > 0) {
+                    body << &response;
+                  }
+                  // Read until EOF, writing data to output as we go.
+                  while (boost::asio::read(socket, response, boost::asio::transfer_at_least(1), error)) {
+                            body << &response;
+                  }
+                  
+                  MDEBUG(body.str());
+                  //TODO Disabled errors. handle short read (close properly)
+                  if (error != boost::asio::error::eof && error.value() != 0){
+                    MDEBUG("ERRORRRR" << error);
+                    throw boost::system::system_error(error);
+                  }
+                  
+                  m_response_info.m_body = body.str();
+                  
+                  *ppresponse_info = std::addressof(m_response_info);
+                  return true;
+                  
+                }
+                catch (std::exception& e)
+                {
+                  std::cerr << "Exception: " << e.what() << "\n";
+                }
+
+                return false;
+    
+			}
+            
 			//---------------------------------------------------------------------------
 			inline bool invoke_post(const boost::string_ref uri, const std::string& body, std::chrono::milliseconds timeout, const http_response_info** ppresponse_info = NULL, const fields_list& additional_params = fields_list())
 			{

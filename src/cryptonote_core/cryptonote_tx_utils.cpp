@@ -249,6 +249,16 @@ namespace cryptonote
         LOG_ERROR("tx pubkey " << src_entr.real_out_tx_key << ", real_output_in_tx_index " << src_entr.real_output_in_tx_index);
         return false;
       }
+      
+      MDEBUG("derived public key mismatch? with output public key at index " << idx << ", real out " << src_entr.real_output << "! "<< ENDL << "derived_key:"
+        << string_tools::pod_to_hex(in_ephemeral.pub) << ENDL << "real output_public_key:"
+        << string_tools::pod_to_hex(src_entr.outputs[src_entr.real_output].second) );
+      MDEBUG("amount " << src_entr.amount << ", rct " << src_entr.rct);
+      MDEBUG("tx pubkey " << src_entr.real_out_tx_key << ", real_output_in_tx_index " << src_entr.real_output_in_tx_index);
+      
+      
+      MDEBUG("derived key: " << string_tools::pod_to_hex(in_ephemeral.pub) << ENDL << "real output_public_key:"
+      << string_tools::pod_to_hex(src_entr.outputs[src_entr.real_output].second) );
 
       //put key image into tx input
       txin_to_key input_to_key;
@@ -258,11 +268,9 @@ namespace cryptonote
       //fill outputs array and use relative offsets
       for(const tx_source_entry::output_entry& out_entry: src_entr.outputs)
         input_to_key.key_offsets.push_back(out_entry.first);
-
       input_to_key.key_offsets = absolute_output_offsets_to_relative(input_to_key.key_offsets);
       tx.vin.push_back(input_to_key);
     }
-
     // "Shuffle" outs
     std::vector<tx_destination_entry> shuffled_dsts(destinations);
     std::sort(shuffled_dsts.begin(), shuffled_dsts.end(), [](const tx_destination_entry& de1, const tx_destination_entry& de2) { return de1.amount < de2.amount; } );
@@ -286,7 +294,6 @@ namespace cryptonote
       }
       r = crypto::derive_public_key(derivation, output_index, dst_entr.addr.m_spend_public_key, out_eph_public_key);
       CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to derive_public_key(" << derivation << ", " << output_index << ", "<< dst_entr.addr.m_spend_public_key << ")");
-
       tx_out out;
       out.amount = dst_entr.amount;
       txout_to_key tk;
@@ -312,7 +319,6 @@ namespace cryptonote
     {
       MDEBUG("Null secret key, skipping signatures");
     }
-
     if (tx.version == 1)
     {
       //generate ring signatures
@@ -355,7 +361,6 @@ namespace cryptonote
       // the non-simple version is slightly smaller, but assumes all real inputs
       // are on the same index, so can only be used if there just one ring.
       bool use_simple_rct = sources.size() > 1;
-
       if (!use_simple_rct)
       {
         // non simple ringct requires all real inputs to be at the same index for all inputs
@@ -376,7 +381,6 @@ namespace cryptonote
           }
         }
       }
-
       uint64_t amount_in = 0, amount_out = 0;
       rct::ctkeyV inSk;
       // mixRing indexing is done the other way round for simple
@@ -424,6 +428,8 @@ namespace cryptonote
           for (size_t n = 0; n < sources.size(); ++n)
           {
             mixRing[i][n] = sources[n].outputs[i].second;
+            MDEBUG("sources[n].outputs[i].second.dest: " << string_tools::pod_to_hex(sources[n].outputs[i].second.dest));
+            MDEBUG("sources[n].outputs[i].second.mask: " << string_tools::pod_to_hex(sources[n].outputs[i].second.mask));
           }
         }
       }
@@ -431,7 +437,6 @@ namespace cryptonote
       // fee
       if (!use_simple_rct && amount_in > amount_out)
         outamounts.push_back(amount_in - amount_out);
-
       // zero out all amounts to mask rct outputs, real amounts are now encrypted
       for (size_t i = 0; i < tx.vin.size(); ++i)
       {
@@ -444,16 +449,16 @@ namespace cryptonote
       crypto::hash tx_prefix_hash;
       get_transaction_prefix_hash(tx, tx_prefix_hash);
       rct::ctkeyV outSk;
-      if (use_simple_rct)
+      if (use_simple_rct){
         tx.rct_signatures = rct::genRctSimple(rct::hash2rct(tx_prefix_hash), inSk, destinations, inamounts, outamounts, amount_in - amount_out, mixRing, amount_keys, index, outSk);
-      else
+      }
+      else {
         tx.rct_signatures = rct::genRct(rct::hash2rct(tx_prefix_hash), inSk, destinations, outamounts, mixRing, amount_keys, sources[0].real_output, outSk); // same index assumption
-
+      }
       CHECK_AND_ASSERT_MES(tx.vout.size() == outSk.size(), false, "outSk size does not match vout");
 
       MCINFO("construct_tx", "transaction_created: " << get_transaction_hash(tx) << ENDL << obj_to_json_str(tx) << ENDL);
     }
-
     tx.invalidate_hashes();
 
     return true;

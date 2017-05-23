@@ -277,6 +277,15 @@ namespace cryptonote
     return true;
   }
   //---------------------------------------------------------------
+  // TODO:: //refactor
+  bool add_tx_pub_key_to_extra(transaction_prefix& tx, const crypto::public_key& tx_pub_key)
+  {
+    tx.extra.resize(tx.extra.size() + 1 + sizeof(crypto::public_key));
+    tx.extra[tx.extra.size() - 1 - sizeof(crypto::public_key)] = TX_EXTRA_TAG_PUBKEY;
+    *reinterpret_cast<crypto::public_key*>(&tx.extra[tx.extra.size() - sizeof(crypto::public_key)]) = tx_pub_key;
+    return true;
+  }
+  //---------------------------------------------------------------
   bool add_extra_nonce_to_tx_extra(std::vector<uint8_t>& tx_extra, const blobdata& extra_nonce)
   {
     CHECK_AND_ASSERT_MES(extra_nonce.size() <= TX_EXTRA_NONCE_MAX_COUNT, false, "extra nonce could be 255 bytes max");

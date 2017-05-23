@@ -81,7 +81,7 @@ public:
     bool store(const std::string &path);
     std::string filename() const;
     std::string keysFilename() const;
-    bool init(const std::string &daemon_address, uint64_t upper_transaction_size_limit = 0, const std::string &daemon_username = "", const std::string &daemon_password = "");
+    bool init(const std::string &daemon_address, uint64_t upper_transaction_size_limit = 0, const std::string &daemon_username = "", const std::string &daemon_password = "", bool lightWallet = false, bool lightWalletNewAddress = false);
     bool connectToDaemon();
     ConnectionStatus connected() const;
     void setTrustedDaemon(bool arg);
@@ -128,6 +128,7 @@ public:
     virtual void startRefresh();
     virtual void pauseRefresh();
     virtual bool parse_uri(const std::string &uri, std::string &address, std::string &payment_id, uint64_t &amount, std::string &tx_description, std::string &recipient_name, std::vector<std::string> &unknown_parameters, std::string &error);
+    virtual bool lightWalletImportWalletRequest(std::string &payment_id, uint64_t fee, bool new_request, bool request_fulfilled, std::string &payment_address, std::string &status);
 
 private:
     void clearStatus() const;
@@ -175,6 +176,10 @@ private:
     // cache connection status to avoid unnecessary RPC calls
     mutable std::atomic<bool>   m_is_connected;
     boost::optional<epee::net_utils::http::login> m_daemon_login{};
+    
+    // Lightwallet - MyMonero/OpenMonero
+    bool m_isLightWallet;
+    epee::net_utils::http::http_simple_client m_ssl_client{};
 };
 
 

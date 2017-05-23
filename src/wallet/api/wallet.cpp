@@ -41,6 +41,9 @@
 #include <sstream>
 #include <unordered_map>
 
+#include <boost/asio.hpp>
+#include <iostream>
+
 using namespace std;
 using namespace cryptonote;
 
@@ -56,7 +59,7 @@ namespace {
     // limit maximum refresh interval as one minute
     static const int    MAX_REFRESH_INTERVAL_MILLIS = 1000 * 60 * 1;
     // Default refresh interval when connected to remote node
-    static const int    DEFAULT_REMOTE_NODE_REFRESH_INTERVAL_MILLIS = 1000 * 10;
+    static const int    DEFAULT_REMOTE_NODE_REFRESH_INTERVAL_MILLIS = 1000 * 60;
     // Connection timeout 30 sec
     static const int    DEFAULT_CONNECTION_TIMEOUT_MILLIS = 1000 * 30;
 }
@@ -277,6 +280,7 @@ WalletImpl::WalletImpl(bool testnet)
     , m_synchronized(false)
     , m_rebuildWalletCache(false)
     , m_is_connected(false)
+    , m_isLightWallet(false)
 {
     m_wallet = new tools::wallet2(testnet);
     m_history = new TransactionHistoryImpl(this);
@@ -301,10 +305,14 @@ WalletImpl::~WalletImpl()
     LOG_PRINT_L1(__FUNCTION__);
     // Pause refresh thread - prevents refresh from starting again
     pauseRefresh();
-    // Close wallet - stores cache and stops ongoing refresh operation 
-    close();
+
     // Stop refresh thread
     stopRefresh();
+    MDEBUG("REFRESH THREAD STOPPED");
+    
+    // Close wallet - stores cache and stops ongoing refresh operation 
+    close();
+    
     delete m_wallet2Callback;
     delete m_history;
     delete m_addressBook;
@@ -672,12 +680,47 @@ string WalletImpl::keysFilename() const
     return m_wallet->get_keys_file();
 }
 
-bool WalletImpl::init(const std::string &daemon_address, uint64_t upper_transaction_size_limit, const std::string &daemon_username, const std::string &daemon_password)
+bool WalletImpl::init(const std::string &daemon_address, uint64_t upper_transaction_size_limit, const std::string &daemon_username, const std::string &daemon_password, bool lightWallet, bool lightWalletNewAddress)
 {
     clearStatus();
+      
     if(daemon_username != "")
         m_daemon_login.emplace(daemon_username, daemon_password);
-    return doInit(daemon_address, upper_transaction_size_limit);
+    
+    if(lightWallet) {
+      m_isLightWallet = true; 
+      m_wallet->set_light_wallet(true);
+      if(doInit(daemon_address, upper_transaction_size_limit)) {
+        return m_wallet->light_wallet_login(lightWalletNewAddress);
+      }
+    } else {
+      return doInit(daemon_address, upper_transaction_size_limit);
+    }
+    
+    return false;
+}
+
+bool WalletImpl::lightWalletImportWalletRequest(std::string &payment_id, uint64_t fee, bool new_request, bool request_fulfilled, std::string &payment_address, std::string &status) 
+{
+  cryptonote::COMMAND_RPC_LIGHT_WALLET_IMPORT_WALLET_REQUEST::response response;
+  if(!m_wallet->light_wallet_import_wallet_request(response))
+    return false;
+
+  fee = (response.import_fee.empty()) ? 0 : boost::lexical_cast<uint64_t>(response.import_fee);
+  payment_id = response.payment_id;
+  new_request = response.new_request;
+  request_fulfilled = response.request_fulfilled;
+  payment_address = response.payment_address;
+  status = response.status;
+  
+  MDEBUG("Payment id: " << payment_id);
+  MDEBUG("Import fee: " << print_money(fee));
+  MDEBUG("New request: " << new_request);
+  MDEBUG("Request fulfilled: " << request_fulfilled);
+  MDEBUG("Payment address: " << payment_address);
+  MDEBUG("Status: " << status);
+  
+  return true;
 }
 
 void WalletImpl::setRefreshFromBlockHeight(uint64_t refresh_from_block_height)
@@ -1314,9 +1357,10 @@ void WalletImpl::doRefresh()
     // synchronizing async and sync refresh calls
     boost::lock_guard<boost::mutex> guarg(m_refreshMutex2);
     try {
+      
         // Syncing daemon and refreshing wallet simultaneously is very resource intensive.
         // Disable refresh if wallet is disconnected or daemon isn't synced.
-        if (daemonSynced()) {
+        if (daemonSynced() || m_isLightWallet) {
             m_wallet->refresh();
             if (!m_synchronized) {
                 m_synchronized = true;
@@ -1388,19 +1432,23 @@ bool WalletImpl::doInit(const string &daemon_address, uint64_t upper_transaction
 
     // in case new wallet, this will force fast-refresh (pulling hashes instead of blocks)
     // If daemon isn't synced a calculated block height will be used instead
+    //TODO: Handle light wallet scenario where block height = 0. hacked refresh 3 weeks back below.
     if (isNewWallet() && daemonSynced()) {
-        LOG_PRINT_L2(__FUNCTION__ << ":New Wallet - fast refresh until " << daemonBlockChainHeight());
-        m_wallet->set_refresh_from_block_height(daemonBlockChainHeight());
+        LOG_PRINT_L2(__FUNCTION__ << ":New Wallet - fast refresh until " << daemonBlockChainHeight()- 30*24*7*3);
+        m_wallet->set_refresh_from_block_height(daemonBlockChainHeight() - 30*24*7*3);
     }
 
     if (m_rebuildWalletCache)
       LOG_PRINT_L2(__FUNCTION__ << ": Rebuilding wallet cache, fast refresh until block " << m_wallet->get_refresh_from_block_height());
 
-    if (Utils::isAddressLocal(daemon_address)) {
+    if(m_isLightWallet) {
+        m_refreshIntervalMillis = DEFAULT_REMOTE_NODE_REFRESH_INTERVAL_MILLIS;
+    } else if (Utils::isAddressLocal(daemon_address)) {
         this->setTrustedDaemon(true);
         m_refreshIntervalMillis = DEFAULT_REFRESH_INTERVAL_MILLIS;
     } else {
-        this->setTrustedDaemon(false);
+        // this->setTrustedDaemon(false);
+        this->setTrustedDaemon(true); //TODO: Remove when lightwallet works
         m_refreshIntervalMillis = DEFAULT_REMOTE_NODE_REFRESH_INTERVAL_MILLIS;
     }
     return true;
@@ -1413,6 +1461,7 @@ bool WalletImpl::parse_uri(const std::string &uri, std::string &address, std::st
 
 bool WalletImpl::rescanSpent()
 {
+  MDEBUG(__FUNCTION__);
   clearStatus();
   if (!trustedDaemon()) {
     m_status = Status_Error;

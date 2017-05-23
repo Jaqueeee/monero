@@ -27,4 +27,5 @@
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 add_subdirectory(src)
+include_directories(/usr/local/opt/openssl/include)
 

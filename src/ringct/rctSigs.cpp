@@ -385,6 +385,7 @@ namespace rct {
             M[i][rows] = identity();
             for (j = 0; j < rows; j++) {
                 M[i][j] = pubs[i][j].dest;
+                MDEBUG("MASK:" << epee::string_tools::pod_to_hex(pubs[i][j].mask));
                 addKeys(M[i][rows], M[i][rows], pubs[i][j].mask); //add input commitments in last row
             }
         }
@@ -571,7 +572,6 @@ namespace rct {
         for (size_t n = 0; n < mixRing.size(); ++n) {
           CHECK_AND_ASSERT_THROW_MES(mixRing[n].size() == inSk.size(), "Bad mixRing size");
         }
-
         rctSig rv;
         rv.type = RCTTypeFull;
         rv.message = message;
@@ -583,6 +583,7 @@ namespace rct {
         keyV masks(destinations.size()); //sk mask..
         outSk.resize(destinations.size());
         for (i = 0; i < destinations.size(); i++) {
+
             //add destination to sig
             rv.outPk[i].dest = copy(destinations[i]);
             //compute range proof
@@ -598,6 +599,7 @@ namespace rct {
 
         }
 
+
         //set txn fee
         if (amounts.size() > destinations.size())
         {
@@ -607,10 +609,13 @@ namespace rct {
         {
           rv.txnFee = 0;
         }
+
         key txnFeeKey = scalarmultH(d2h(rv.txnFee));
 
         rv.mixRing = mixRing;
+        
         rv.p.MGs.push_back(proveRctMG(get_pre_mlsag_hash(rv), rv.mixRing, inSk, outSk, rv.outPk, index, txnFeeKey));
+
         return rv;
     }
 
