@@ -1697,6 +1697,17 @@ void wallet2::refresh(uint64_t start_height, uint64_t & blocks_fetched, bool& re
     
     light_wallet_get_address_txs();
     
+    cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_TXS::response &response
+    light_wallet_get_address_info(response);
+    m_light_wallet_scanned_block_height = response.scanned_block_height;
+    m_light_wallet_blockchain_height = response.blockchain_height;
+    
+    MDEBUG("lw scanned block height: " <<  m_light_wallet_scanned_block_height);
+    MDEBUG("lw blockchain height: " <<  m_light_wallet_blockchain_height);
+    MDEBUG(m_light_wallet_blockchain_height-m_light_wallet_scanned_block_height << " blocks behind");
+    
+    m_light_wallet_scanned_block_height(0), m_light_wallet_blockchain_height(0);
+    
     // Populate m_transfers
     //if(m_transfers.empty())
       light_wallet_fetch_unspent_outs();
