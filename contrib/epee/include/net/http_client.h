@@ -431,6 +431,10 @@ using namespace std;
                 try
                 {
 
+                  MDEBUG("ssl uri: " << uri);
+                  MDEBUG("ssl method: " << method);
+                  MDEBUG("ssl host buff: " << m_host_buff);
+                  
                   boost::asio::io_service io_service;
 
                   boost::asio::ip::tcp::resolver resolver(io_service);
@@ -509,16 +513,19 @@ using namespace std;
                   // We don't care about SSL shutdown and EOF errors
                   if (
                     error == boost::asio::error::eof 
-                    && error.category() == boost::asio::error::get_ssl_category()
-                    && error.value() == ERR_PACK(ERR_LIB_SSL, 0, SSL_R_SHORT_READ)
+                    || ( error.category() == boost::asio::error::get_ssl_category() && error.value() == ERR_PACK(ERR_LIB_SSL, 0, SSL_R_SHORT_READ))
                   ) {
                     MDEBUG("SSL shutdown or EOF error");
                   } else {
                     MDEBUG("ERRORRRR" << error);
                     MDEBUG(error.message());
-                    throw boost::system::system_error(error);
+                    MDEBUG("-----");
+                    MDEBUG(body.str());
+                    MDEBUG("-----");
+                    return false;
+                   // throw boost::system::system_error(error);
                   }
-                  
+
                   m_response_info.m_body = body.str();
                   *ppresponse_info = std::addressof(m_response_info);
                   return true;

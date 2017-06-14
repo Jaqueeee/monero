@@ -794,9 +794,11 @@ uint64_t WalletImpl::daemonBlockChainTargetHeight() const
 
 bool WalletImpl::daemonSynced() const
 {   
+    MDEBUG(__FUNCTION__);
     if(connected() == Wallet::ConnectionStatus_Disconnected)
         return false;
     uint64_t blockChainHeight = daemonBlockChainHeight();
+    MDEBUG("ds end");
     return (blockChainHeight >= daemonBlockChainTargetHeight() && blockChainHeight > 1);
 }
 
@@ -1280,6 +1282,8 @@ bool WalletImpl::verifySignedMessage(const std::string &message, const std::stri
 
 bool WalletImpl::connectToDaemon()
 {
+    if(m_isLightWallet)
+        return true;
     bool result = m_wallet->check_connection(NULL, DEFAULT_CONNECTION_TIMEOUT_MILLIS);
     m_status = result ? Status_Ok : Status_Error;
     if (!result) {
@@ -1292,6 +1296,9 @@ bool WalletImpl::connectToDaemon()
 
 Wallet::ConnectionStatus WalletImpl::connected() const
 {
+    if(m_isLightWallet)
+        return Wallet::ConnectionStatus_Connected;
+        
     uint32_t version = 0;
     m_is_connected = m_wallet->check_connection(&version, DEFAULT_CONNECTION_TIMEOUT_MILLIS);
     if (!m_is_connected)
@@ -1357,11 +1364,12 @@ void WalletImpl::doRefresh()
     // synchronizing async and sync refresh calls
     boost::lock_guard<boost::mutex> guarg(m_refreshMutex2);
     try {
-      
         // Syncing daemon and refreshing wallet simultaneously is very resource intensive.
         // Disable refresh if wallet is disconnected or daemon isn't synced.
         if (daemonSynced() || m_isLightWallet) {
+            MDEBUG("calling refresh()");
             m_wallet->refresh();
+            MDEBUG("refresh call finished");
             if (!m_synchronized) {
                 m_synchronized = true;
             }
@@ -1369,7 +1377,9 @@ void WalletImpl::doRefresh()
             // for futher history changes client need to update history in
             // "on_money_received" and "on_money_sent" callbacks
             if (m_history->count() == 0) {
+                MDEBUG("refreshing history");
                 m_history->refresh();
+                MDEBUG("refreshing history finished");
             }
         } else {
            LOG_PRINT_L3(__FUNCTION__ << ": skipping refresh - daemon is not synced");

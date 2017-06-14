@@ -2392,6 +2392,13 @@ bool wallet2::check_connection(uint32_t *version, uint32_t timeout)
 {
   THROW_WALLET_EXCEPTION_IF(!m_is_initialized, error::wallet_not_initialized);
 
+  if(m_light_wallet) 
+  {
+    // TODO: check lightwallet daemon 
+    version = 0;
+    return true;    
+  }
+  
   boost::lock_guard<boost::mutex> lock(m_daemon_rpc_mutex);
 
   if(!m_http_client.is_connected())
@@ -3168,10 +3175,12 @@ void wallet2::commit_tx(pending_tx& ptx)
     oreq.view_key = string_tools::pod_to_hex(get_account().get_keys().m_view_secret_key);
     oreq.tx = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx.tx));
     m_daemon_rpc_mutex.lock();
-    if (!epee::net_utils::invoke_http_ssl_json("/submit_raw_tx", oreq, ores, m_light_wallet_client, std::chrono::seconds(5), "POST")) {
+    bool r = epee::net_utils::invoke_http_ssl_json("/submit_raw_tx", oreq, ores, m_light_wallet_client, std::chrono::seconds(5), "POST");
+    m_daemon_rpc_mutex.unlock();
+    if (!r) {
       MERROR("Lightwallet: Failed to submit raw tx");
     }
-    m_daemon_rpc_mutex.unlock();
+
     
     THROW_WALLET_EXCEPTION_IF(ores.status != "OK", error::tx_rejected, ptx.tx, ores.status, ores.error);
       
@@ -3672,10 +3681,12 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
     oreq.amounts = {"0"};
     oreq.count = light_wallet_requested_outputs_count;
     m_daemon_rpc_mutex.lock();
-    if (!epee::net_utils::invoke_http_ssl_json("/get_random_outs", oreq, ores, m_light_wallet_client, std::chrono::seconds(5), "POST")) {
+    bool r = epee::net_utils::invoke_http_ssl_json("/get_random_outs", oreq, ores, m_light_wallet_client, std::chrono::seconds(5), "POST");
+    m_daemon_rpc_mutex.unlock();
+    if (!r) {
       MERROR("Lightwallet: Failed to get random outs");
     }
-    m_daemon_rpc_mutex.unlock();
+
     THROW_WALLET_EXCEPTION_IF(ores.amount_outs.empty() , error::wallet_internal_error, "No outputs recieved from light wallet node. Error: " + ores.Error);
     MDEBUG(ores.amount_outs[0].outputs.size() << " outputs received from light wallet node");
     MDEBUG("selected transfers size: " << selected_transfers.size());
@@ -4479,11 +4490,12 @@ bool wallet2::light_wallet_login(bool new_address)
   // Always create account if it doesnt exist.
   request.create_account = true;
   m_daemon_rpc_mutex.lock();
-  if (!epee::net_utils::invoke_http_ssl_json("/login", request, response, m_light_wallet_client, std::chrono::seconds(5), "POST")) {
-    MERROR("Lightwallet: Failed on login");
-    return false;
-  }
+  bool r = epee::net_utils::invoke_http_ssl_json("/login", request, response, m_light_wallet_client, std::chrono::seconds(5), "POST");
   m_daemon_rpc_mutex.unlock();
+  if (!r) {
+    MERROR("Lightwallet: Failed on login");
+  }
+
 
   new_address = response.new_address;
   MDEBUG("Status: " << response.status);
@@ -4499,11 +4511,12 @@ bool wallet2::light_wallet_import_wallet_request(cryptonote::COMMAND_RPC_LIGHT_W
   oreq.address = get_account().get_public_address_str(m_testnet);
   oreq.view_key = string_tools::pod_to_hex(get_account().get_keys().m_view_secret_key);
   m_daemon_rpc_mutex.lock();
-  if (!epee::net_utils::invoke_http_ssl_json("/import_wallet_request", oreq, response, m_light_wallet_client, std::chrono::seconds(5), "POST")) {
+  bool r = epee::net_utils::invoke_http_ssl_json("/import_wallet_request", oreq, response, m_light_wallet_client, std::chrono::seconds(5), "POST");
+  m_daemon_rpc_mutex.unlock();
+  if (!r) {
     MERROR("Lightwallet: Failed on import_wallet_request");
     return false;
   }
-  m_daemon_rpc_mutex.unlock();
 
 
   return true;
@@ -4522,11 +4535,13 @@ void wallet2::light_wallet_fetch_unspent_outs()
   oreq.view_key = string_tools::pod_to_hex(get_account().get_keys().m_view_secret_key);
 
   m_daemon_rpc_mutex.lock();
-  if (!epee::net_utils::invoke_http_ssl_json("/get_unspent_outs", oreq, ores, m_light_wallet_client, std::chrono::seconds(5), "POST")) {
+  bool r = epee::net_utils::invoke_http_ssl_json("/get_unspent_outs", oreq, ores, m_light_wallet_client, std::chrono::seconds(5), "POST");
+  m_daemon_rpc_mutex.unlock();
+  if (!r) {
     MERROR("Lightwallet: Failed to get unspent outs");
     return;
   }
-  m_daemon_rpc_mutex.unlock();
+  
 
   
   std::unordered_map<crypto::hash,bool> transfers_txs;
@@ -4698,13 +4713,13 @@ void wallet2::light_wallet_get_address_txs()
   
   ireq.address = get_account().get_public_address_str(m_testnet);
   ireq.view_key = string_tools::pod_to_hex(get_account().get_keys().m_view_secret_key);
-
   m_daemon_rpc_mutex.lock();
-  if (!epee::net_utils::invoke_http_ssl_json("/get_address_txs", ireq, ires, m_light_wallet_client, std::chrono::seconds(30), "POST")) {
+  bool r = epee::net_utils::invoke_http_ssl_json("/get_address_txs", ireq, ires, m_light_wallet_client, std::chrono::seconds(30), "POST");
+  m_daemon_rpc_mutex.unlock();
+  if (!r) {
     MERROR("Lightwallet: Failed to get address txs");
     return;
   }
-  m_daemon_rpc_mutex.unlock();
   
   // Clear mempool?
   // m_unconfirmed_payments.clear();
