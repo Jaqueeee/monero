@@ -32,6 +32,9 @@
 #include "portable_storage_template_helper.h"
 #include "net/http_base.h"
 #include "net/http_server_handlers_map2.h"
+#if (defined(__ANDROID__))
+#include <android/log.h>
+#endif
 
 namespace epee
 {
@@ -95,6 +98,11 @@ namespace epee
           return false;
         }
         //(uri == "/get_random_outs")
+        
+#if (defined(__ANDROID__))
+          __android_log_print(ANDROID_LOG_INFO,"ANDROID-GUI","%s", pri->m_body.c_str());
+#endif
+        
           MDEBUG(pri->m_body);
         return serialization::load_t_from_json(result_struct, pri->m_body);   
     }

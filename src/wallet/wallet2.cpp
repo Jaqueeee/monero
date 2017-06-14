@@ -34,6 +34,9 @@
 #include <boost/optional/optional.hpp>
 #include <boost/utility/value_init.hpp>
 #include "include_base_utils.h"
+#if (defined(__ANDROID__))
+#include <android/log.h>
+#endif
 using namespace epee;
 
 #include "cryptonote_config.h"
@@ -4498,6 +4501,8 @@ bool wallet2::light_wallet_login(bool new_address)
 
 
   new_address = response.new_address;
+  MDEBUG("address: " << request.address);
+  MDEBUG("view_key: " << request.view_key);
   MDEBUG("Status: " << response.status);
   MDEBUG("Reason: " << response.reason);
   MDEBUG("New wallet: " << response.new_address);
