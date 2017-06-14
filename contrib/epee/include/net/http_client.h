@@ -493,25 +493,33 @@ using namespace std;
                        std::cout << header << "\n";
                   }
 
-                  m_response_info.m_response_code = 200;
+                  m_response_info.m_response_code = status_code;
+                  MDEBUG("STATUS CODE:" << status_code);
                   // Write whatever content we already have to output.
                   if (response.size() > 0) {
                     body << &response;
                   }
-                  // Read until EOF, writing data to output as we go.
+                  
+                  // Read until EOF
                   while (boost::asio::read(socket, response, boost::asio::transfer_at_least(1), error)) {
                             body << &response;
                   }
                   
-                  MDEBUG(body.str());
-                  //TODO Disabled errors. handle short read (close properly)
-                  if (error != boost::asio::error::eof && error.value() != 0){
+                  // Check for errors
+                  // We don't care about SSL shutdown and EOF errors
+                  if (
+                    error == boost::asio::error::eof 
+                    && error.category() == boost::asio::error::get_ssl_category()
+                    && error.value() == ERR_PACK(ERR_LIB_SSL, 0, SSL_R_SHORT_READ)
+                  ) {
+                    MDEBUG("SSL shutdown or EOF error");
+                  } else {
                     MDEBUG("ERRORRRR" << error);
+                    MDEBUG(error.message());
                     throw boost::system::system_error(error);
                   }
                   
                   m_response_info.m_body = body.str();
-                  
                   *ppresponse_info = std::addressof(m_response_info);
                   return true;
                   

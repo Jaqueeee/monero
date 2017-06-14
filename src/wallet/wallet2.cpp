@@ -511,11 +511,15 @@ bool wallet2::init(std::string daemon_address, boost::optional<epee::net_utils::
 {
   if(m_light_wallet) {
     m_light_wallet_client.set_server("212.83.173.241:8443", boost::none);
+    MDEBUG("212.83.173.241:8443 set as lightwallet server");
+    return true; // TODO: fix this damnit
     // m_payments.clear();
     // m_unconfirmed_payments.clear();
     // m_transfers.clear();
    // cryptonote::COMMAND_RPC_LIGHT_WALLET_IMPORT_WALLET_REQUEST::response response;
    // light_wallet_import_wallet_request(response);
+  } else {
+       MDEBUG("initializing full wallet_!");
   }
   
   
