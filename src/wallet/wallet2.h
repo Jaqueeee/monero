@@ -611,6 +611,8 @@ namespace tools
     void light_wallet_fetch_unspent_outs();
     // fetch txs and store in m_payments
     void light_wallet_get_address_txs();
+    // get_address_info 
+    bool light_wallet_get_address_info(cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_TXS::response &response);
     // Login. new_address is true if address hasn't been used on lw node before.
     bool light_wallet_login(bool new_address);
     // Send an import request to lw node. returns info about import fee, address and payment_id

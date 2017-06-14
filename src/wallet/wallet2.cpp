@@ -4709,6 +4709,25 @@ void wallet2::light_wallet_fetch_unspent_outs()
   
 }
 
+
+bool wallet2::light_wallet_get_address_info(cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_TXS::response &response)
+{
+  MDEBUG(__FUNCTION__);
+  
+  cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_TXS::request request;
+  
+  request.address = get_account().get_public_address_str(m_testnet);
+  request.view_key = string_tools::pod_to_hex(get_account().get_keys().m_view_secret_key);
+  m_daemon_rpc_mutex.lock();
+  bool r = epee::net_utils::invoke_http_ssl_json("/get_address_info", request, response, m_light_wallet_client, std::chrono::seconds(30), "POST");
+  m_daemon_rpc_mutex.unlock();
+  if (!r) {
+    MERROR("Lightwallet: Failed on get_address_info");
+    return false;
+  }
+  return true;
+}
+
 void wallet2::light_wallet_get_address_txs()
 {
   MDEBUG("Refreshing light wallet");
