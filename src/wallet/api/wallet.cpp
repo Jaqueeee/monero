@@ -306,12 +306,11 @@ WalletImpl::~WalletImpl()
     // Pause refresh thread - prevents refresh from starting again
     pauseRefresh();
 
-    // Stop refresh thread
-    stopRefresh();
-    MDEBUG("REFRESH THREAD STOPPED");
-    
     // Close wallet - stores cache and stops ongoing refresh operation 
     close();
+
+    // Stop refresh thread
+    stopRefresh();
     
     delete m_wallet2Callback;
     delete m_history;
@@ -1416,6 +1415,7 @@ void WalletImpl::startRefresh()
 
 void WalletImpl::stopRefresh()
 {
+    MDEBUG(__FUNCTION__);
     if (!m_refreshThreadDone) {
         m_refreshEnabled = false;
         m_refreshThreadDone = true;
