@@ -745,6 +745,9 @@ uint64_t WalletImpl::unlockedBalance() const
 
 uint64_t WalletImpl::blockChainHeight() const
 {
+    if(m_isLightWallet) {
+        return m_wallet->get_light_wallet_scanned_block_height();
+    }
     return m_wallet->get_blockchain_current_height();
 }
 uint64_t WalletImpl::approximateBlockChainHeight() const
@@ -753,6 +756,9 @@ uint64_t WalletImpl::approximateBlockChainHeight() const
 }
 uint64_t WalletImpl::daemonBlockChainHeight() const
 {
+    if(m_isLightWallet) {
+        return m_wallet->get_light_wallet_scanned_block_height();
+    }
     if (!m_is_connected)
         return 0;
     std::string err;
@@ -772,6 +778,9 @@ uint64_t WalletImpl::daemonBlockChainHeight() const
 
 uint64_t WalletImpl::daemonBlockChainTargetHeight() const
 {
+    if(m_isLightWallet) {
+        return m_wallet->get_light_wallet_blockchain_height();
+    }
     if (!m_is_connected)
         return 0;
     std::string err;

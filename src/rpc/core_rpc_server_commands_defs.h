@@ -245,11 +245,13 @@ namespace cryptonote
         uint64_t scanned_height;
         std::list<transaction> transactions;
         uint64_t blockchain_height;
+        uint64_t scanned_block_height;
         BEGIN_KV_SERIALIZE_MAP()
           KV_SERIALIZE(total_received)
           KV_SERIALIZE(scanned_height)
           KV_SERIALIZE(transactions)
           KV_SERIALIZE(blockchain_height)
+          KV_SERIALIZE(scanned_block_height)
         END_KV_SERIALIZE_MAP()
       };
   };

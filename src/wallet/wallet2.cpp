@@ -1697,21 +1697,18 @@ void wallet2::refresh(uint64_t start_height, uint64_t & blocks_fetched, bool& re
     
     light_wallet_get_address_txs();
     
-    cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_TXS::response &response
-    light_wallet_get_address_info(response);
-    m_light_wallet_scanned_block_height = response.scanned_block_height;
-    m_light_wallet_blockchain_height = response.blockchain_height;
+    // // Get address info (scanned height, blockchain height)
+    // cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_INFO::response res;
+    // light_wallet_get_address_info(res);
+    // m_light_wallet_scanned_block_height = res.scanned_block_height;
+    // m_light_wallet_blockchain_height = res.blockchain_height;
     
     MDEBUG("lw scanned block height: " <<  m_light_wallet_scanned_block_height);
     MDEBUG("lw blockchain height: " <<  m_light_wallet_blockchain_height);
     MDEBUG(m_light_wallet_blockchain_height-m_light_wallet_scanned_block_height << " blocks behind");
     
-    m_light_wallet_scanned_block_height(0), m_light_wallet_blockchain_height(0);
-    
     // Populate m_transfers
-    //if(m_transfers.empty())
-      light_wallet_fetch_unspent_outs();
-
+    light_wallet_fetch_unspent_outs();
 
     // Lighwallet done
     return;
@@ -4605,7 +4602,7 @@ void wallet2::light_wallet_fetch_unspent_outs()
     for(auto &t: m_transfers){
       if(t.get_public_key() == public_key) {
         t.m_spent = spent;
-        MDEBUG(string_tools::pod_to_hex(public_key) << " already in m_transfers - Not adding");
+        MTRACE(string_tools::pod_to_hex(public_key) << " already in m_transfers - Not adding");
         add_transfer = false;
         break;
       }
@@ -4614,7 +4611,7 @@ void wallet2::light_wallet_fetch_unspent_outs()
     if(!add_transfer)
       continue;
     
-    MDEBUG("Adding output " << o.public_key);
+    MTRACE("Adding output " << o.public_key);
     m_transfers.push_back(boost::value_initialized<transfer_details>());
     transfer_details& td = m_transfers.back();
     
@@ -4698,22 +4695,22 @@ void wallet2::light_wallet_fetch_unspent_outs()
     m_key_images[td.m_key_image] = m_transfers.size()-1;
     m_pub_keys[td.get_public_key()] = m_transfers.size()-1;
     if(spent)
-      MDEBUG("Spent output "<< o.amount << " xmr added to m_transfers tx_hash: " << o.tx_hash);
+      MTRACE("Spent output "<< o.amount << " xmr added to m_transfers tx_hash: " << o.tx_hash);
     else
-      MDEBUG("Unspent output "<< o.amount << " xmr added to m_transfers tx_hash: " << o.tx_hash);      
+      MTRACE("Unspent output "<< o.amount << " xmr added to m_transfers tx_hash: " << o.tx_hash);      
   }
-  MDEBUG("dumping m_transfers");
+  MTRACE("dumping m_transfers");
   for(auto &t: m_transfers)
   {
     if(t.m_spent)
-      MDEBUG("Spent " << t.amount() << " xmr public_key: " << string_tools::pod_to_hex(t.m_txid));
+      MTRACE("Spent " << t.amount() << " xmr public_key: " << string_tools::pod_to_hex(t.m_txid));
     else
-      MDEBUG("Unspent " << t.amount() << " xmr public_key: " << string_tools::pod_to_hex(t.m_txid));    
+      MTRACE("Unspent " << t.amount() << " xmr public_key: " << string_tools::pod_to_hex(t.m_txid));    
   }
   
-  MDEBUG("dumping m_unconfirmed_txs");
+  MTRACE("dumping m_unconfirmed_txs");
   for(auto& utx: m_unconfirmed_txs) {
-    MDEBUG("unconfirmed found!");
+    MTRACE("unconfirmed found!");
     //MDEBUG("unconfirmed " << utx.amount() << " xmr public_key: " << string_tools::pod_to_hex(t.m_txid));
   }
   
@@ -4721,11 +4718,11 @@ void wallet2::light_wallet_fetch_unspent_outs()
 }
 
 
-bool wallet2::light_wallet_get_address_info(cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_TXS::response &response)
+bool wallet2::light_wallet_get_address_info(cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_INFO::response &response)
 {
   MDEBUG(__FUNCTION__);
   
-  cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_TXS::request request;
+  cryptonote::COMMAND_RPC_LIGHT_WALLET_GET_ADDRESS_INFO::request request;
   
   request.address = get_account().get_public_address_str(m_testnet);
   request.view_key = string_tools::pod_to_hex(get_account().get_keys().m_view_secret_key);
@@ -4755,6 +4752,10 @@ void wallet2::light_wallet_get_address_txs()
     MERROR("Lightwallet: Failed to get address txs");
     return;
   }
+  
+  // Store blockchain info
+  m_light_wallet_scanned_block_height = ires.scanned_block_height;
+  m_light_wallet_blockchain_height = ires.blockchain_height;
   
   // Clear mempool?
   // m_unconfirmed_payments.clear();

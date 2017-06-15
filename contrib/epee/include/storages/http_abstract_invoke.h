@@ -103,7 +103,7 @@ namespace epee
           __android_log_print(ANDROID_LOG_INFO,"ANDROID-GUI","%s", pri->m_body.c_str());
 #endif
         
-          MDEBUG(pri->m_body);
+          // MDEBUG(pri->m_body);
         return serialization::load_t_from_json(result_struct, pri->m_body);   
     }
 
