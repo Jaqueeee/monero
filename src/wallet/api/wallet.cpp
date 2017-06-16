@@ -59,7 +59,7 @@ namespace {
     // limit maximum refresh interval as one minute
     static const int    MAX_REFRESH_INTERVAL_MILLIS = 1000 * 60 * 1;
     // Default refresh interval when connected to remote node
-    static const int    DEFAULT_REMOTE_NODE_REFRESH_INTERVAL_MILLIS = 1000 * 60;
+    static const int    DEFAULT_REMOTE_NODE_REFRESH_INTERVAL_MILLIS = 1000 * 10;
     // Connection timeout 30 sec
     static const int    DEFAULT_CONNECTION_TIMEOUT_MILLIS = 1000 * 30;
 }
@@ -280,7 +280,6 @@ WalletImpl::WalletImpl(bool testnet)
     , m_synchronized(false)
     , m_rebuildWalletCache(false)
     , m_is_connected(false)
-    , m_isLightWallet(false)
 {
     m_wallet = new tools::wallet2(testnet);
     m_history = new TransactionHistoryImpl(this);
@@ -686,9 +685,9 @@ bool WalletImpl::init(const std::string &daemon_address, uint64_t upper_transact
     if(daemon_username != "")
         m_daemon_login.emplace(daemon_username, daemon_password);
     
+    m_wallet->set_light_wallet(lightWallet);
+    
     if(lightWallet) {
-      m_isLightWallet = true; 
-      m_wallet->set_light_wallet(true);
       if(doInit(daemon_address, upper_transaction_size_limit)) {
         return m_wallet->light_wallet_login(lightWalletNewAddress);
       }
@@ -744,7 +743,7 @@ uint64_t WalletImpl::unlockedBalance() const
 
 uint64_t WalletImpl::blockChainHeight() const
 {
-    if(m_isLightWallet) {
+    if(m_wallet->light_wallet()) {
         return m_wallet->get_light_wallet_scanned_block_height();
     }
     return m_wallet->get_blockchain_current_height();
@@ -755,7 +754,7 @@ uint64_t WalletImpl::approximateBlockChainHeight() const
 }
 uint64_t WalletImpl::daemonBlockChainHeight() const
 {
-    if(m_isLightWallet) {
+    if(m_wallet->light_wallet()) {
         return m_wallet->get_light_wallet_scanned_block_height();
     }
     if (!m_is_connected)
@@ -777,7 +776,7 @@ uint64_t WalletImpl::daemonBlockChainHeight() const
 
 uint64_t WalletImpl::daemonBlockChainTargetHeight() const
 {
-    if(m_isLightWallet) {
+    if(m_wallet->light_wallet()) {
         return m_wallet->get_light_wallet_blockchain_height();
     }
     if (!m_is_connected)
@@ -1290,7 +1289,7 @@ bool WalletImpl::verifySignedMessage(const std::string &message, const std::stri
 
 bool WalletImpl::connectToDaemon()
 {
-    if(m_isLightWallet)
+    if(m_wallet->light_wallet())
         return true;
     bool result = m_wallet->check_connection(NULL, DEFAULT_CONNECTION_TIMEOUT_MILLIS);
     m_status = result ? Status_Ok : Status_Error;
@@ -1304,7 +1303,7 @@ bool WalletImpl::connectToDaemon()
 
 Wallet::ConnectionStatus WalletImpl::connected() const
 {
-    if(m_isLightWallet)
+    if(m_wallet->light_wallet())
         return Wallet::ConnectionStatus_Connected;
         
     uint32_t version = 0;
@@ -1374,7 +1373,7 @@ void WalletImpl::doRefresh()
     try {
         // Syncing daemon and refreshing wallet simultaneously is very resource intensive.
         // Disable refresh if wallet is disconnected or daemon isn't synced.
-        if (daemonSynced() || m_isLightWallet) {
+        if (daemonSynced() || m_wallet->light_wallet()) {
             MDEBUG("calling refresh()");
             m_wallet->refresh();
             MDEBUG("refresh call finished");
@@ -1451,16 +1450,16 @@ bool WalletImpl::doInit(const string &daemon_address, uint64_t upper_transaction
 
     // in case new wallet, this will force fast-refresh (pulling hashes instead of blocks)
     // If daemon isn't synced a calculated block height will be used instead
-    //TODO: Handle light wallet scenario where block height = 0. hacked refresh 3 weeks back below.
+    //TODO: Handle light wallet scenario where block height = 0. hacked refresh 10 weeks back below.
     if (isNewWallet() && daemonSynced()) {
         LOG_PRINT_L2(__FUNCTION__ << ":New Wallet - fast refresh until " << daemonBlockChainHeight()- 30*24*7*3);
-        m_wallet->set_refresh_from_block_height(daemonBlockChainHeight() - 30*24*7*3);
+        m_wallet->set_refresh_from_block_height(daemonBlockChainHeight() - 30*24*7*10);
     }
 
     if (m_rebuildWalletCache)
       LOG_PRINT_L2(__FUNCTION__ << ": Rebuilding wallet cache, fast refresh until block " << m_wallet->get_refresh_from_block_height());
 
-    if(m_isLightWallet) {
+    if(m_wallet->light_wallet()) {
         m_refreshIntervalMillis = DEFAULT_REMOTE_NODE_REFRESH_INTERVAL_MILLIS;
     } else if (Utils::isAddressLocal(daemon_address)) {
         this->setTrustedDaemon(true);
