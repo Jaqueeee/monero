@@ -319,13 +319,15 @@ else()
   message(STATUS "Stack trace on exception disabled")
 endif()
 
-# Handle OpenSSL, used for sha256sum on binary updates
+# Handle OpenSSL, used for sha256sum on binary updates and light wallet ssl http
 if (APPLE AND NOT IOS)
   if (NOT OpenSSL_DIR)
       EXECUTE_PROCESS(COMMAND brew --prefix openssl
         OUTPUT_VARIABLE OPENSSL_ROOT_DIR
         OUTPUT_STRIP_TRAILING_WHITESPACE)
     message(STATUS "Using OpenSSL found at ${OPENSSL_ROOT_DIR}")
+    message(STATUS "Using OpenSSL include dir at ${OPENSSL_ROOT_DIR}/include")
+    include_directories(${OPENSSL_ROOT_DIR}/include)
   endif()
 endif()
 
