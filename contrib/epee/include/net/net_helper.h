@@ -37,6 +37,7 @@
 #include <ostream>
 #include <string>
 #include <boost/asio.hpp>
+#include <boost/asio/ssl.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/preprocessor/selection/min.hpp>
 #include <boost/lambda/bind.hpp>
@@ -85,11 +86,14 @@ namespace net_utils
 		
 	public:
 		inline
-			blocked_mode_client():m_socket(m_io_service), 
+			blocked_mode_client(bool ssl = false):m_socket(m_io_service),
                             m_initialized(false), 
                             m_connected(false), 
                             m_deadline(m_io_service), 
-                            m_shutdowned(0)
+                            m_shutdowned(0),
+                            m_ssl(ssl),
+                            m_ctx(boost::asio::ssl::context::sslv23),
+                            m_ssl_socket(m_io_service,m_ctx)
 		{
 			
 			
@@ -124,7 +128,8 @@ namespace net_utils
       m_connected = false;
 			try
 			{
-				m_socket.close();
+        if(!m_ssl)
+				  m_socket.close();
 				// Get a list of endpoints corresponding to the server name.
 				
 
@@ -146,38 +151,59 @@ namespace net_utils
 				//boost::asio::ip::tcp::endpoint remote_endpoint(boost::asio::ip::address::from_string(addr.c_str()), port);
 				boost::asio::ip::tcp::endpoint remote_endpoint(*iterator);
 
-
-				m_socket.open(remote_endpoint.protocol());
-				if(bind_ip != "0.0.0.0" && bind_ip != "0" && bind_ip != "" )
-				{
-					boost::asio::ip::tcp::endpoint local_endpoint(boost::asio::ip::address::from_string(addr.c_str()), 0);
-					m_socket.bind(local_endpoint);
-				}
-
-				
 				m_deadline.expires_from_now(timeout);
-
-
 				boost::system::error_code ec = boost::asio::error::would_block;
+        
+        if(!m_ssl)
+        {
+  				m_socket.open(remote_endpoint.protocol());
+  				if(bind_ip != "0.0.0.0" && bind_ip != "0" && bind_ip != "" )
+  				{
+  					boost::asio::ip::tcp::endpoint local_endpoint(boost::asio::ip::address::from_string(addr.c_str()), 0);
+  					m_socket.bind(local_endpoint);
+  				}
 
-				//m_socket.connect(remote_endpoint);
-				m_socket.async_connect(remote_endpoint, boost::lambda::var(ec) = boost::lambda::_1);
-				while (ec == boost::asio::error::would_block)
-				{	
-					m_io_service.run_one(); 
-				}
+  				//m_socket.connect(remote_endpoint);
+  				m_socket.async_connect(remote_endpoint, boost::lambda::var(ec) = boost::lambda::_1);
+  				while (ec == boost::asio::error::would_block)
+  				{	
+  					m_io_service.run_one(); 
+  				}
 				
-				if (!ec && m_socket.is_open())
-				{
-					m_connected = true;
-					m_deadline.expires_at(std::chrono::steady_clock::time_point::max());
-					return true;
-				}else
-				{
-					MWARNING("Some problems at connect, message: " << ec.message());
-					return false;
-				}
-
+  				if (!ec && m_socket.is_open())
+  				{
+  					m_connected = true;
+  					m_deadline.expires_at(std::chrono::steady_clock::time_point::max());
+  					return true;
+  				} else
+  				{
+  					MWARNING("Some problems at connect, message: " << ec.message());
+  					return false;
+  				}               
+        } 
+        // SSL
+        else
+        {
+  				boost::asio::async_connect(m_ssl_socket.lowest_layer(), iterator, boost::lambda::var(ec) = boost::lambda::_1);
+          
+  				while (ec == boost::asio::error::would_block)
+  				{	
+  					m_io_service.run_one(); 
+  				}
+				
+  				if (!ec)
+  				{
+  					m_connected = true;
+  					m_deadline.expires_at(std::chrono::steady_clock::time_point::max());
+            m_ssl_socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
+            m_ssl_socket.handshake(boost::asio::ssl::stream_base::client);
+  					return true;
+  				} else
+  				{
+  					MWARNING("Some problems at connect, message: " << ec.message());
+  					return false;
+  				}            
+        }
 			}
 			catch(const boost::system::system_error& er)
 			{
@@ -240,23 +266,26 @@ namespace net_utils
 				// object is used as a callback and will update the ec variable when the
 				// operation completes. The blocking_udp_client.cpp example shows how you
 				// can use boost::bind rather than boost::lambda.
-				boost::asio::async_write(m_socket, boost::asio::buffer(buff), boost::lambda::var(ec) = boost::lambda::_1);
+        if(!m_ssl)
+                boost::asio::async_write(m_socket, boost::asio::buffer(buff), boost::lambda::var(ec) = boost::lambda::_1);
+        else
+                boost::asio::async_write(m_ssl_socket, boost::asio::buffer(buff), boost::lambda::var(ec) = boost::lambda::_1);
 
-				// Block until the asynchronous operation has completed.
-				while (ec == boost::asio::error::would_block)
-				{
-					m_io_service.run_one(); 
-				}
 
-				if (ec)
-				{
-					LOG_PRINT_L3("Problems at write: " << ec.message());
-          m_connected = false;
-					return false;
-				}else
-				{
-					m_deadline.expires_at(std::chrono::steady_clock::time_point::max());
-				}
+        // Block until the asynchronous operation has completed.
+        while (ec == boost::asio::error::would_block)
+        {
+          m_io_service.run_one();
+        }
+        if (ec)
+        {
+          LOG_PRINT_L3("Problems at write: " << ec.message());
+                  m_connected = false;
+          return false;
+        }else
+        {
+          m_deadline.expires_at(std::chrono::steady_clock::time_point::max());
+        }
 			}
 
 			catch(const boost::system::system_error& er)
@@ -302,9 +331,12 @@ namespace net_utils
 				*/
 				boost::system::error_code ec;
 
-				size_t writen = m_socket.write_some(boost::asio::buffer(data, sz), ec);
+        size_t writen;
+        if(m_ssl)
+          writen = m_ssl_socket.write_some(boost::asio::buffer(data, sz), ec);
+        else
+          writen = m_socket.write_some(boost::asio::buffer(data, sz), ec);
 				
-
 
 				if (!writen || ec)
 				{
@@ -334,7 +366,7 @@ namespace net_utils
 
 		bool is_connected()
 		{
-			return m_connected && m_socket.is_open();
+			return m_connected && (m_ssl || m_socket.is_open());
 			//TRY_ENTRY()
 			//return m_socket.is_open();
 			//CATCH_ENTRY_L0("is_connected", false)
@@ -370,7 +402,12 @@ namespace net_utils
 
 				char local_buff[10000] = {0};
 				//m_socket.async_read_some(boost::asio::buffer(local_buff, sizeof(local_buff)), hndlr);
-				boost::asio::async_read(m_socket, boost::asio::buffer(local_buff, sizeof(local_buff)), boost::asio::transfer_at_least(1), hndlr);
+				
+        if(!m_ssl)
+          boost::asio::async_read(m_socket, boost::asio::buffer(local_buff, sizeof(local_buff)), boost::asio::transfer_at_least(1), hndlr);
+        else
+          boost::asio::async_read(m_ssl_socket, boost::asio::buffer(local_buff, sizeof(local_buff)), boost::asio::transfer_at_least(1), hndlr);
+  
 
 				// Block until the asynchronous operation has completed.
 				while (ec == boost::asio::error::would_block && !boost::interprocess::ipcdetail::atomic_read32(&m_shutdowned))
@@ -553,6 +590,9 @@ namespace net_utils
 	protected:
 		boost::asio::io_service m_io_service;
 		boost::asio::ip::tcp::socket m_socket;
+    boost::asio::ssl::context m_ctx;
+    boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_ssl_socket;
+    bool m_ssl;
 		bool m_initialized;
 		bool m_connected;
 		boost::asio::steady_timer m_deadline;
