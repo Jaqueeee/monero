@@ -351,7 +351,7 @@ namespace tools
     // the minimum block size.
     bool deinit();
     bool init(std::string daemon_address = "http://localhost:8080",
-      boost::optional<epee::net_utils::http::login> daemon_login = boost::none, uint64_t upper_transaction_size_limit = 0);
+      boost::optional<epee::net_utils::http::login> daemon_login = boost::none, uint64_t upper_transaction_size_limit = 0, bool ssl = false);
 
     void stop() { m_run.store(false, std::memory_order_relaxed); }
 
@@ -727,7 +727,6 @@ namespace tools
     
     // Light wallet
     bool m_light_wallet; /* sends view key to daemon for scanning */
-    epee::net_utils::http::http_simple_client m_light_wallet_client{};
     uint64_t m_light_wallet_scanned_block_height;
     uint64_t m_light_wallet_blockchain_height;
   };

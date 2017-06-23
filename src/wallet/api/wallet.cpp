@@ -312,9 +312,16 @@ WalletImpl::~WalletImpl()
     stopRefresh();
     
     delete m_wallet2Callback;
+    MDEBUG("deleted WALLET2callbck");
     delete m_history;
+
+    MDEBUG("DELETING m_history");
     delete m_addressBook;
+
+    MDEBUG("DELETING addressbook");
     delete m_wallet;
+
+    MDEBUG("DELETING m_wallet");
     LOG_PRINT_L1(__FUNCTION__ << " finished");
 }
 
@@ -678,24 +685,28 @@ string WalletImpl::keysFilename() const
     return m_wallet->get_keys_file();
 }
 
-bool WalletImpl::init(const std::string &daemon_address, uint64_t upper_transaction_size_limit, const std::string &daemon_username, const std::string &daemon_password, bool lightWallet, bool lightWalletNewAddress)
+bool WalletImpl::init(const std::string &daemon_address, uint64_t upper_transaction_size_limit, const std::string &daemon_username, const std::string &daemon_password, bool use_ssl, bool lightWallet, bool lightWalletNewAddress)
 {
     clearStatus();
+    // stopRefresh();
       
     if(daemon_username != "")
         m_daemon_login.emplace(daemon_username, daemon_password);
     
     m_wallet->set_light_wallet(lightWallet);
-    
+    bool status = false;
     if(lightWallet) {
-      if(doInit(daemon_address, upper_transaction_size_limit)) {
-        return m_wallet->light_wallet_login(lightWalletNewAddress);
+      bool ssl = true;
+      MDEBUG("INITIALIZING LIGHT WALLET");
+      if(doInit(daemon_address, upper_transaction_size_limit, ssl)) {
+        status = m_wallet->light_wallet_login(lightWalletNewAddress);
       }
     } else {
-      return doInit(daemon_address, upper_transaction_size_limit);
+      status = doInit(daemon_address, upper_transaction_size_limit);
     }
     
-    return false;
+    // startRefresh();
+    return status;
 }
 
 bool WalletImpl::lightWalletImportWalletRequest(std::string &payment_id, uint64_t fee, bool new_request, bool request_fulfilled, std::string &payment_address, std::string &status) 
@@ -1302,15 +1313,13 @@ bool WalletImpl::connectToDaemon()
 }
 
 Wallet::ConnectionStatus WalletImpl::connected() const
-{
-    if(m_wallet->light_wallet())
-        return Wallet::ConnectionStatus_Connected;
-        
+{        
     uint32_t version = 0;
     m_is_connected = m_wallet->check_connection(&version, DEFAULT_CONNECTION_TIMEOUT_MILLIS);
     if (!m_is_connected)
         return Wallet::ConnectionStatus_Disconnected;
-    if ((version >> 16) != CORE_RPC_VERSION_MAJOR)
+    // Version check is not implemented in light wallets nodes/wallets
+    if ((version >> 16) != CORE_RPC_VERSION_MAJOR && !m_wallet->light_wallet())
         return Wallet::ConnectionStatus_WrongVersion;
     return Wallet::ConnectionStatus_Connected;
 }
@@ -1443,9 +1452,9 @@ bool WalletImpl::isNewWallet() const
     return !(blockChainHeight() > 1 || m_recoveringFromSeed || m_rebuildWalletCache) && !watchOnly();
 }
 
-bool WalletImpl::doInit(const string &daemon_address, uint64_t upper_transaction_size_limit)
+bool WalletImpl::doInit(const string &daemon_address, uint64_t upper_transaction_size_limit, bool ssl)
 {
-    if (!m_wallet->init(daemon_address, m_daemon_login, upper_transaction_size_limit))
+    if (!m_wallet->init(daemon_address, m_daemon_login, upper_transaction_size_limit, ssl))
        return false;
 
     // in case new wallet, this will force fast-refresh (pulling hashes instead of blocks)

@@ -365,7 +365,7 @@ struct Wallet
      * \param lightWalletNewAddress - true if lightwallet node haven't seen the address before.
      * \return  - true on success
      */
-    virtual bool init(const std::string &daemon_address, uint64_t upper_transaction_size_limit, const std::string &daemon_username = "", const std::string &daemon_password = "", bool lightWallet = false, bool lightWalletNewAddress = false) = 0;
+    virtual bool init(const std::string &daemon_address, uint64_t upper_transaction_size_limit, const std::string &daemon_username = "", const std::string &daemon_password = "", bool use_ssl = false, bool lightWallet = false, bool lightWalletNewAddress = false) = 0;
 
    /*!
     * \brief createWatchOnly - Creates a watch only wallet

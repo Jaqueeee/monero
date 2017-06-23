@@ -439,7 +439,9 @@ std::tuple<bool, std::string, std::string, std::string, std::string> WalletManag
 #endif
 
     std::string version, hash;
-    MDEBUG("Checking for a new " << software << " version for " << buildtag);
+    MDEBUG("DISABLED - Checking for a new " << software << " version for " << buildtag);
+    return std::make_tuple(false, "", "", "", "");
+    
     if (!tools::check_updates(software, buildtag, version, hash))
       return std::make_tuple(false, "", "", "", "");
 
