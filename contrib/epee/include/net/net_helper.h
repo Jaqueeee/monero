@@ -86,12 +86,12 @@ namespace net_utils
 		
 	public:
 		inline
-			blocked_mode_client(bool ssl = false):m_socket(m_io_service),
+			blocked_mode_client():m_socket(m_io_service),
                             m_initialized(false), 
                             m_connected(false), 
                             m_deadline(m_io_service), 
                             m_shutdowned(0),
-                            m_ssl(ssl),
+                            m_ssl(false),
                             m_ctx(boost::asio::ssl::context::sslv23),
                             m_ssl_socket(m_io_service,m_ctx)
 		{
@@ -117,19 +117,21 @@ namespace net_utils
 		}
 
     inline
-      bool connect(const std::string& addr, int port, std::chrono::milliseconds timeout, const std::string& bind_ip = "0.0.0.0")
+      bool connect(const std::string& addr, int port, std::chrono::milliseconds timeout, bool ssl = false, const std::string& bind_ip = "0.0.0.0")
     {
-      return connect(addr, std::to_string(port), timeout, bind_ip);
+      return connect(addr, std::to_string(port), timeout, ssl, bind_ip);
     }
 
     inline
-			bool connect(const std::string& addr, const std::string& port, std::chrono::milliseconds timeout, const std::string& bind_ip = "0.0.0.0")
+			bool connect(const std::string& addr, const std::string& port, std::chrono::milliseconds timeout, bool ssl = false, const std::string& bind_ip = "0.0.0.0")
 		{
       m_connected = false;
+      m_ssl = ssl;
 			try
 			{
-        if(!m_ssl)
-				  m_socket.close();
+        
+				m_socket.close();
+        m_ssl_socket.lowest_layer().close(ignored_ec);
 				// Get a list of endpoints corresponding to the server name.
 				
 
@@ -229,13 +231,14 @@ namespace net_utils
 				{
 					m_connected = false;
 					m_socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
-					
+          boost::system::error_code ec;
+          m_ssl_socket.shutdown(ec);
 				}
 			}
 			
-			catch(const boost::system::system_error& /*er*/)
+			catch(const boost::system::system_error& er)
 			{
-				//LOG_ERROR("Some problems at disconnect, message: " << er.what());
+        // LOG_ERROR("Some problems at disconnect, message: " << er.what());
 				return false;
 			}
 			catch(...)
@@ -462,7 +465,6 @@ namespace net_utils
 
 		inline bool recv_n(std::string& buff, int64_t sz, std::chrono::milliseconds timeout)
 		{
-
 			try
 			{
 				// Set a deadline for the asynchronous operation. Since this function uses
@@ -490,8 +492,11 @@ namespace net_utils
 				handler_obj hndlr(ec, bytes_transfered);
 
 				//char local_buff[10000] = {0};
-				boost::asio::async_read(m_socket, boost::asio::buffer((char*)buff.data(), buff.size()), boost::asio::transfer_at_least(buff.size()), hndlr);
-
+				if(!m_ssl)
+          boost::asio::async_read(m_socket, boost::asio::buffer((char*)buff.data(), buff.size()), boost::asio::transfer_at_least(buff.size()), hndlr);
+        else
+          boost::asio::async_read(m_ssl_socket, boost::asio::buffer((char*)buff.data(), buff.size()), boost::asio::transfer_at_least(buff.size()), hndlr);
+          
 				// Block until the asynchronous operation has completed.
 				while (ec == boost::asio::error::would_block && !boost::interprocess::ipcdetail::atomic_read32(&m_shutdowned))
 				{
@@ -538,12 +543,18 @@ namespace net_utils
 		{
 			m_deadline.cancel();
 			boost::system::error_code ignored_ec;
-			m_socket.cancel(ignored_ec);
+      m_socket.cancel(ignored_ec);
 			m_socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignored_ec);
 			m_socket.close(ignored_ec);
-			boost::interprocess::ipcdetail::atomic_write32(&m_shutdowned, 1);
+
+      m_ssl_socket.lowest_layer().cancel(ignored_ec);
+			m_ssl_socket.shutdown(ignored_ec);
+      m_ssl_socket.lowest_layer().close(ignored_ec);
+			
+      boost::interprocess::ipcdetail::atomic_write32(&m_shutdowned, 1);
       m_connected = false;
-			return true;
+			
+      return true;
 		}
 		
 		void set_connected(bool connected)
@@ -559,7 +570,7 @@ namespace net_utils
 		{
 			return m_socket;
 		}
-		
+    
 	private:
 
 		void check_deadline()
@@ -574,8 +585,9 @@ namespace net_utils
 				// connect(), read_line() or write_line() functions to return.
 				LOG_PRINT_L3("Timed out socket");
         m_connected = false;
-				m_socket.close();
-
+        m_socket.close();
+        m_ssl_socket.lowest_layer().close(ignored_ec);
+        
 				// There is no longer an active deadline. The expiry is set to positive
 				// infinity so that the actor takes no action until a new deadline is set.
 				m_deadline.expires_at(std::chrono::steady_clock::time_point::max());
@@ -701,6 +713,7 @@ namespace net_utils
 				// connect(), read_line() or write_line() functions to return.
 				LOG_PRINT_L3("Timed out socket");
 				m_socket.close();
+        m_ssl_socket.lowest_layer().close(ignored_ec);
 
 				// There is no longer an active deadline. The expiry is set to positive
 				// infinity so that the actor takes no action until a new deadline is set.

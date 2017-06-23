@@ -32,8 +32,6 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/optional/optional.hpp>
 #include <boost/utility/string_ref.hpp>
-#include <boost/asio.hpp>
-#include <boost/asio/ssl.hpp>
 //#include <mbstring.h>
 #include <algorithm>
 #include <cctype>
@@ -277,6 +275,7 @@ using namespace std;
 			chunked_state m_chunked_state;
 			std::string m_chunked_cache;
 			critical_section m_lock;
+      bool m_ssl;
 
 		public:
 			explicit http_simple_client()
@@ -294,30 +293,32 @@ using namespace std;
 				, m_chunked_state()
 				, m_chunked_cache()
 				, m_lock()
+        , m_ssl(false)
 			{}
 
-			bool set_server(const std::string& address, boost::optional<login> user)
+			bool set_server(const std::string& address, boost::optional<login> user, bool ssl = false)
 			{
 				http::url_content parsed{};
 				const bool r = parse_url(address, parsed);
 				CHECK_AND_ASSERT_MES(r, false, "failed to parse url: " << address);
-				set_server(std::move(parsed.host), std::to_string(parsed.port), std::move(user));
+				set_server(std::move(parsed.host), std::to_string(parsed.port), std::move(user), ssl);
 				return true;
 			}
 
-			void set_server(std::string host, std::string port, boost::optional<login> user)
+			void set_server(std::string host, std::string port, boost::optional<login> user, bool ssl = false)
 			{
 				CRITICAL_REGION_LOCAL(m_lock);
 				disconnect();
 				m_host_buff = std::move(host);
 				m_port = std::move(port);
-                                m_auth = user ? http_client_auth{std::move(*user)} : http_client_auth{};
+        m_auth = user ? http_client_auth{std::move(*user)} : http_client_auth{};
+        m_ssl = ssl;
 			}
 
       bool connect(std::chrono::milliseconds timeout)
       {
         CRITICAL_REGION_LOCAL(m_lock);
-        return m_net_client.connect(m_host_buff, m_port, timeout);
+        return m_net_client.connect(m_host_buff, m_port, timeout, m_ssl);
       }
 			//---------------------------------------------------------------------------
 			bool disconnect()
