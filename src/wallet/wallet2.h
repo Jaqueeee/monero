@@ -71,7 +71,7 @@ namespace tools
   public:
     virtual void on_new_block(uint64_t height, const cryptonote::block& block) {}
     virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount) {}
-    virtual void on_unconfirmed_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount) {}
+    virtual void on_unconfirmed_money_received(uint64_t height, const crypto::hash &txid, uint64_t amount) {}
     virtual void on_money_spent(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& in_tx, uint64_t amount, const cryptonote::transaction& spend_tx) {}
     virtual void on_skip_transaction(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx) {}
     virtual ~i_wallet2_callback() {}
@@ -129,7 +129,7 @@ namespace tools
     //! Just parses variables.
     static std::unique_ptr<wallet2> make_dummy(const boost::program_options::variables_map& vm);
 
-    wallet2(bool testnet = false, bool restricted = false) : m_run(true), m_callback(0), m_testnet(testnet), m_always_confirm_transfers(true), m_print_ring_members(false), m_store_tx_info(true), m_default_mixin(0), m_default_priority(0), m_refresh_type(RefreshOptimizeCoinbase), m_auto_refresh(true), m_refresh_from_block_height(0), m_confirm_missing_payment_id(true), m_ask_password(true), m_min_output_count(0), m_min_output_value(0), m_merge_destinations(false), m_is_initialized(false), m_restricted(restricted), is_old_file_format(false), m_node_rpc_proxy(m_http_client, m_daemon_rpc_mutex) {}
+    wallet2(bool testnet = false, bool restricted = false) : m_run(true), m_callback(0), m_testnet(testnet), m_always_confirm_transfers(true), m_print_ring_members(false), m_store_tx_info(true), m_default_mixin(0), m_default_priority(0), m_refresh_type(RefreshOptimizeCoinbase), m_auto_refresh(true), m_refresh_from_block_height(0), m_confirm_missing_payment_id(true), m_ask_password(true), m_min_output_count(0), m_min_output_value(0), m_merge_destinations(false), m_is_initialized(false), m_restricted(restricted), is_old_file_format(false), m_node_rpc_proxy(m_http_client, m_daemon_rpc_mutex), m_light_wallet(false), m_light_wallet_scanned_block_height(0), m_light_wallet_blockchain_height(0) {}
 
     struct transfer_details
     {
@@ -149,7 +149,9 @@ namespace tools
 
       bool is_rct() const { return m_rct; }
       uint64_t amount() const { return m_amount; }
-      const crypto::public_key &get_public_key() const { return boost::get<const cryptonote::txout_to_key>(m_tx.vout[m_internal_output_index].target).key; }
+      const crypto::public_key &get_public_key() const { 
+        return boost::get<const cryptonote::txout_to_key>(m_tx.vout[m_internal_output_index].target).key; 
+      }
 
       BEGIN_SERIALIZE_OBJECT()
         FIELD(m_block_height)
@@ -349,7 +351,7 @@ namespace tools
     // the minimum block size.
     bool deinit();
     bool init(std::string daemon_address = "http://localhost:8080",
-      boost::optional<epee::net_utils::http::login> daemon_login = boost::none, uint64_t upper_transaction_size_limit = 0);
+      boost::optional<epee::net_utils::http::login> daemon_login = boost::none, uint64_t upper_transaction_size_limit = 0, bool ssl = false);
 
     void stop() { m_run.store(false, std::memory_order_relaxed); }
 
@@ -360,6 +362,16 @@ namespace tools
      * \brief Checks if deterministic wallet
      */
     bool is_deterministic() const;
+
+    /*!
+    * \brief Checks if light wallet. A light wallet sends view key to a server where the blockchain is scanned.
+    */
+    bool light_wallet() const { return m_light_wallet; }
+    void set_light_wallet(bool light_wallet) { m_light_wallet = light_wallet; }
+    
+    uint64_t get_light_wallet_scanned_block_height() const { return m_light_wallet_scanned_block_height; }
+    uint64_t get_light_wallet_blockchain_height() const { return m_light_wallet_blockchain_height; }    
+    
     bool get_seed(std::string& electrum_words) const;
     /*!
      * \brief Gets the seed language
@@ -596,6 +608,21 @@ namespace tools
     bool parse_uri(const std::string &uri, std::string &address, std::string &payment_id, uint64_t &amount, std::string &tx_description, std::string &recipient_name, std::vector<std::string> &unknown_parameters, std::string &error);
 
     uint64_t get_blockchain_height_by_date(uint16_t year, uint8_t month, uint8_t day);    // 1<=month<=12, 1<=day<=31
+    
+    // Light wallet functions
+    // fetch unspent outs from lw node and store in m_transfers
+    void light_wallet_get_unspent_outs();
+    // fetch txs and store in m_payments
+    void light_wallet_get_address_txs();
+    // get_address_info 
+    bool light_wallet_get_address_info(cryptonote::COMMAND_RPC_GET_ADDRESS_INFO::response &response);
+    // Login. new_address is true if address hasn't been used on lw node before.
+    bool light_wallet_login(bool new_address);
+    // Send an import request to lw node. returns info about import fee, address and payment_id
+    bool light_wallet_import_wallet_request(cryptonote::COMMAND_RPC_IMPORT_WALLET_REQUEST::response &response);
+		// get random outputs from light wallet server
+		void light_wallet_get_outs(std::vector<std::vector<get_outs_entry>> &outs, const std::list<size_t> &selected_transfers, size_t fake_outputs_count);
+    
 
   private:
     /*!
@@ -681,7 +708,7 @@ namespace tools
     bool m_restricted;
     std::string seed_language; /*!< Language of the mnemonics (seed). */
     bool is_old_file_format; /*!< Whether the wallet file is of an old file format */
-    bool m_watch_only; /*!< no spend key */
+    bool m_watch_only; /*!< no spend key */ 
     bool m_always_confirm_transfers;
     bool m_print_ring_members;
     bool m_store_tx_info; /*!< request txkey to be returned in RPC, and store in the wallet cache file */
@@ -698,6 +725,11 @@ namespace tools
     bool m_is_initialized;
     NodeRPCProxy m_node_rpc_proxy;
     std::unordered_set<crypto::hash> m_scanned_pool_txs[2];
+    
+    // Light wallet
+    bool m_light_wallet; /* sends view key to daemon for scanning */
+    uint64_t m_light_wallet_scanned_block_height;
+    uint64_t m_light_wallet_blockchain_height;
   };
 }
 BOOST_CLASS_VERSION(tools::wallet2, 18)

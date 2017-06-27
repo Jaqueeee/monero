@@ -134,10 +134,6 @@ void TransactionHistoryImpl::refresh()
         ti->m_confirmations = wallet_height - pd.m_block_height;
         m_history.push_back(ti);
 
-        /* output.insert(std::make_pair(pd.m_block_height, std::make_pair(true, (boost::format("%20.20s %s %s %s")
-                                                                                 % print_money(pd.m_amount)
-                                                                                 % string_tools::pod_to_hex(pd.m_tx_hash)
-                                                                                 % payment_id % "-").str()))); */
     }
 
     // confirmed output transactions
