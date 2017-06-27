@@ -359,9 +359,13 @@ struct Wallet
      *
      * \param daemon_address - daemon address in "hostname:port" format
      * \param upper_transaction_size_limit
+     * \param daemon_username
+     * \param daemon_password
+     * \param lightWallet - start wallet in light mode, connect to a openmonero compatible server.
+     * \param lightWalletNewAddress - true if lightwallet node haven't seen the address before.
      * \return  - true on success
      */
-    virtual bool init(const std::string &daemon_address, uint64_t upper_transaction_size_limit, const std::string &daemon_username = "", const std::string &daemon_password = "") = 0;
+    virtual bool init(const std::string &daemon_address, uint64_t upper_transaction_size_limit, const std::string &daemon_username = "", const std::string &daemon_password = "", bool use_ssl = false, bool lightWallet = false, bool lightWalletNewAddress = false) = 0;
 
    /*!
     * \brief createWatchOnly - Creates a watch only wallet
@@ -378,6 +382,13 @@ struct Wallet
     * \param refresh_from_block_height - blockchain start height
     */
     virtual void setRefreshFromBlockHeight(uint64_t refresh_from_block_height) = 0;
+
+   /*!
+    * \brief getRestoreHeight - get wallet creation height
+    *
+    */
+    virtual uint64_t getRefreshFromBlockHeight() const = 0;
+
 
    /*!
     * \brief setRecoveringFromSeed - set state recover form seed
@@ -594,6 +605,9 @@ struct Wallet
     * \return true on success
     */
     virtual bool rescanSpent() = 0;
+    
+    //! Initiates a light wallet import wallet request
+    virtual bool lightWalletImportWalletRequest(std::string &payment_id, uint64_t fee, bool new_request, bool request_fulfilled, std::string &payment_address, std::string &status) = 0;
 };
 
 /**
