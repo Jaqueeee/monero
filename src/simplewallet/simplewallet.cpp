@@ -1660,7 +1660,7 @@ void simple_wallet::on_money_received(uint64_t height, const crypto::hash &txid,
     m_refresh_progress_reporter.update(height, true);
 }
 //----------------------------------------------------------------------------------------------------
-void simple_wallet::on_unconfirmed_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount)
+void simple_wallet::on_unconfirmed_money_received(uint64_t height, const crypto::hash &txid, uint64_t amount)
 {
   // Not implemented in CLI wallet
 }
