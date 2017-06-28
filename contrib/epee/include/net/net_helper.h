@@ -230,11 +230,9 @@ namespace net_utils
 				if(m_connected)
 				{
 					m_connected = false;
-					boost::system::error_code ec;
-					m_ssl_socket.shutdown(ec);
-					// Ignore "short read" error
-					if (ec.category() == boost::asio::error::get_ssl_category() && ec.value() != ERR_PACK(ERR_LIB_SSL, 0, SSL_R_SHORT_READ)) 
-						MDEBUG("Problems at ssl shutdown: " << ec.message());
+					boost::system::error_code ec = boost::asio::error::would_block;
+					if(m_ssl)
+						shutdown_ssl();
 					m_ssl_socket.lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both);
 				}
 			}
@@ -543,10 +541,7 @@ namespace net_utils
 			m_deadline.cancel();
 			boost::system::error_code ec;
 			if(m_ssl) {
-				m_ssl_socket.shutdown(ec);
-				// Ignore "short read" error
-				if (ec.category() == boost::asio::error::get_ssl_category() && ec.value() != ERR_PACK(ERR_LIB_SSL, 0, SSL_R_SHORT_READ)) 
-					MTRACE("Problems at ssl shutdown: " << ec.message());
+				shutdown_ssl();
 			}
 
 			m_ssl_socket.lowest_layer().cancel(ec);
@@ -603,6 +598,20 @@ namespace net_utils
 
 			// Put the actor back to sleep.
 			m_deadline.async_wait(boost::bind(&blocked_mode_client::check_deadline, this));
+		}
+
+		void shutdown_ssl() {
+			// ssl socket shutdown blocks if server doesn't respond. We close after 2 secs
+			boost::system::error_code ec = boost::asio::error::would_block;
+			m_deadline.expires_from_now(std::chrono::milliseconds(2000));
+			m_ssl_socket.async_shutdown(boost::lambda::var(ec) = boost::lambda::_1);
+			while (ec == boost::asio::error::would_block)
+			{
+				m_io_service.run_one();
+			}
+			// Ignore "short read" error
+			if (ec.category() == boost::asio::error::get_ssl_category() && ec.value() != ERR_PACK(ERR_LIB_SSL, 0, SSL_R_SHORT_READ))
+				MDEBUG("Problems at ssl shutdown: " << ec.message());
 		}
 		
 
