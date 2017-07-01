@@ -193,8 +193,8 @@ namespace cryptonote
         std::string amount;
         std::string key_image;
         std::string tx_pub_key;
-        int out_index;
-        int mixin;
+        uint64_t out_index;
+        uint32_t mixin;
         
         
         BEGIN_KV_SERIALIZE_MAP()
@@ -208,7 +208,7 @@ namespace cryptonote
       
       struct transaction
       {
-        int id;
+        uint64_t id;
         std::string hash;
         std::string timestamp;
         std::string total_received;
@@ -219,7 +219,7 @@ namespace cryptonote
         std::string payment_id;
         bool coinbase;
         bool mempool;
-        int mixin;
+        uint32_t mixin;
 
         BEGIN_KV_SERIALIZE_MAP()
           KV_SERIALIZE(id)
@@ -380,7 +380,7 @@ namespace cryptonote
       struct request
       {
         std::vector<std::string> amounts;
-        int count;
+        uint32_t count;
 
         BEGIN_KV_SERIALIZE_MAP()
           KV_SERIALIZE(amounts)
