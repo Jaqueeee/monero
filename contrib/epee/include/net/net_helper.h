@@ -216,7 +216,7 @@ namespace net_utils
 			// For debugging purposes we print the certificate and the preverified bool
 			char subject_name[256];
 			X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
-			X509_NAME_oneline(X509_get_subject_name(cert), subject_name, 256);
+			X509_NAME_oneline(X509_get_subject_name(cert), subject_name, sizeof(subject_name));
 			MDEBUG ("Verifying " << subject_name);
 			MDEBUG(preverified);
 			return preverified;
@@ -270,10 +270,7 @@ namespace net_utils
 				// object is used as a callback and will update the ec variable when the
 				// operation completes. The blocking_udp_client.cpp example shows how you
 				// can use boost::bind rather than boost::lambda.
-				if(!m_ssl)
-					boost::asio::async_write(m_ssl_socket.next_layer(), boost::asio::buffer(buff), boost::lambda::var(ec) = boost::lambda::_1);
-				else
-					boost::asio::async_write(m_ssl_socket, boost::asio::buffer(buff), boost::lambda::var(ec) = boost::lambda::_1);
+				async_write(buff.c_str(), buff.size(), ec);
 
 				// Block until the asynchronous operation has completed.
 				while (ec == boost::asio::error::would_block)
@@ -336,10 +333,7 @@ namespace net_utils
 				boost::system::error_code ec;
 
 				size_t writen;
-				if(m_ssl)
-					writen = boost::asio::write(m_ssl_socket,boost::asio::buffer(data, sz), ec);
-				else
-					writen = boost::asio::write(m_ssl_socket.next_layer(),boost::asio::buffer(data, sz), ec);
+				writen = write(data, sz, ec);
 
 				if (!writen || ec)
 				{
@@ -402,11 +396,7 @@ namespace net_utils
 
 				char local_buff[10000] = {0};
 				
-				if(!m_ssl)
-					boost::asio::async_read(m_ssl_socket.next_layer(), boost::asio::buffer(local_buff, sizeof(local_buff)), boost::asio::transfer_at_least(1), hndlr);
-				else
-					boost::asio::async_read(m_ssl_socket, boost::asio::buffer(local_buff, sizeof(local_buff)), boost::asio::transfer_at_least(1), hndlr);
-  
+				async_read(local_buff, boost::asio::transfer_at_least(1), hndlr);
 
 				// Block until the asynchronous operation has completed.
 				while (ec == boost::asio::error::would_block && !boost::interprocess::ipcdetail::atomic_read32(&m_shutdowned))
@@ -487,13 +477,8 @@ namespace net_utils
 
 				
 				handler_obj hndlr(ec, bytes_transfered);
-
-				//char local_buff[10000] = {0};
-				if(!m_ssl)
-					boost::asio::async_read(m_ssl_socket.next_layer(), boost::asio::buffer((char*)buff.data(), buff.size()), boost::asio::transfer_at_least(buff.size()), hndlr);
-				else
-					boost::asio::async_read(m_ssl_socket, boost::asio::buffer((char*)buff.data(), buff.size()), boost::asio::transfer_at_least(buff.size()), hndlr);
-          
+				async_read((char*)buff.data(), boost::asio::transfer_at_least(buff.size()), hndlr);
+				
 				// Block until the asynchronous operation has completed.
 				while (ec == boost::asio::error::would_block && !boost::interprocess::ipcdetail::atomic_read32(&m_shutdowned))
 				{
@@ -614,7 +599,33 @@ namespace net_utils
 				MDEBUG("Problems at ssl shutdown: " << ec.message());
 		}
 		
-
+	protected:
+		bool write(const void* data, size_t sz, boost::system::error_code& ec)
+		{
+			bool success;
+			if(m_ssl)
+				success = boost::asio::write(m_ssl_socket, boost::asio::buffer(data, sz), ec);
+			else
+				success = boost::asio::write(m_ssl_socket.next_layer(), boost::asio::buffer(data, sz), ec);
+			return success;
+		}
+		
+		void async_write(const void* data, size_t sz, boost::system::error_code& ec) 
+		{
+			if(m_ssl)
+				boost::asio::async_write(m_ssl_socket, boost::asio::buffer(data, sz), boost::lambda::var(ec) = boost::lambda::_1);
+			else
+				boost::asio::async_write(m_ssl_socket.next_layer(), boost::asio::buffer(data, sz), boost::lambda::var(ec) = boost::lambda::_1);
+		}
+		
+		bool async_read(char* buff, boost::asio::detail::transfer_at_least_t transfer_at_least, handler_obj& hndlr)
+		{
+			if(!m_ssl)
+				boost::asio::async_read(m_ssl_socket.next_layer(), boost::asio::buffer(buff, sizeof(buff)), transfer_at_least, hndlr);
+			else
+				boost::asio::async_read(m_ssl_socket, boost::asio::buffer(buff, sizeof(buff)), transfer_at_least, hndlr);
+			
+		}
 		
 	protected:
 		boost::asio::io_service m_io_service;
@@ -687,11 +698,8 @@ namespace net_utils
 				boost::system::error_code ec;
 
 				size_t writen;
-				if(m_ssl)
-					writen = boost::asio::write(m_ssl_socket,boost::asio::buffer(data, sz), ec);
-				else
-					writen = boost::asio::write(m_ssl_socket.next_layer(),boost::asio::buffer(data, sz), ec);
-
+				writen = write(data, sz, ec);
+				
 				if (!writen || ec)
 				{
 					LOG_PRINT_L3("Problems at write: " << ec.message());
