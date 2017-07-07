@@ -1295,7 +1295,7 @@ Wallet::ConnectionStatus WalletImpl::connected() const
     if (!m_is_connected)
         return Wallet::ConnectionStatus_Disconnected;
     // Version check is not implemented in light wallets nodes/wallets
-    if ((version >> 16) != CORE_RPC_VERSION_MAJOR && !m_wallet->light_wallet())
+    if (!m_wallet->light_wallet() && (version >> 16) != CORE_RPC_VERSION_MAJOR)
         return Wallet::ConnectionStatus_WrongVersion;
     return Wallet::ConnectionStatus_Connected;
 }
