@@ -681,14 +681,10 @@ bool WalletImpl::init(const std::string &daemon_address, uint64_t upper_transact
     
     m_wallet->set_light_wallet(lightWallet);
     bool status = false;
-    if(lightWallet) {
-      MDEBUG("INITIALIZING LIGHT WALLET");
-      if(doInit(daemon_address, upper_transaction_size_limit, use_ssl)) {
-        status = m_wallet->light_wallet_login(lightWalletNewAddress);
-      }
-    } else {
-      status = doInit(daemon_address, upper_transaction_size_limit, use_ssl);
-    }
+		
+    status = doInit(daemon_address, upper_transaction_size_limit, use_ssl);
+    if (lightWallet && status)
+      status = m_wallet->light_wallet_login(lightWalletNewAddress);
 
     return status;
 }
