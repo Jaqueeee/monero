@@ -618,7 +618,7 @@ namespace net_utils
 				boost::asio::async_write(m_ssl_socket.next_layer(), boost::asio::buffer(data, sz), boost::lambda::var(ec) = boost::lambda::_1);
 		}
 		
-		bool async_read(char* buff, boost::asio::detail::transfer_at_least_t transfer_at_least, handler_obj& hndlr)
+		void async_read(char* buff, boost::asio::detail::transfer_at_least_t transfer_at_least, handler_obj& hndlr)
 		{
 			if(!m_ssl)
 				boost::asio::async_read(m_ssl_socket.next_layer(), boost::asio::buffer(buff, sizeof(buff)), transfer_at_least, hndlr);
