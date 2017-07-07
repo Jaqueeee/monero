@@ -509,7 +509,6 @@ std::unique_ptr<wallet2> wallet2::make_dummy(const boost::program_options::varia
 //----------------------------------------------------------------------------------------------------
 bool wallet2::init(std::string daemon_address, boost::optional<epee::net_utils::http::login> daemon_login, uint64_t upper_transaction_size_limit, bool ssl)
 {
-    
   m_is_initialized = true;
   m_upper_transaction_size_limit = upper_transaction_size_limit;
   m_daemon_address = std::move(daemon_address);
@@ -517,7 +516,6 @@ bool wallet2::init(std::string daemon_address, boost::optional<epee::net_utils::
 
   if(m_http_client.is_connected())
     m_http_client.disconnect();
-  
   return m_http_client.set_server(get_daemon_address(), get_daemon_login(), ssl);
 }
 //----------------------------------------------------------------------------------------------------
@@ -4532,8 +4530,8 @@ void wallet2::light_wallet_get_unspent_outs()
     td.m_key_image = unspent_key_image;
     td.m_key_image_known = !m_watch_only;
     td.m_amount = boost::lexical_cast<uint64_t>(o.amount);
-    td.m_pk_index = 0; //TODO: Not sure what this is?
-    td.m_internal_output_index = o.index; //TODO:: is this correct?
+    td.m_pk_index = 0;
+    td.m_internal_output_index = o.index;
     td.m_spent = spent;
 
     tx_out txout;
@@ -4664,7 +4662,9 @@ void wallet2::light_wallet_get_address_txs()
       string_tools::hex_to_pod(so.key_image, key_image);
 
       if(key_image != calculated_key_image){
-        total_sent -= boost::lexical_cast<uint64_t>(so.amount);
+        uint64_t amount = boost::lexical_cast<uint64_t>(so.amount);
+        THROW_WALLET_EXCEPTION_IF(amount > total_sent, error::wallet_internal_error, "Lightwallet: total sent is negative!");
+        total_sent -= amount;
       }
     }
 
