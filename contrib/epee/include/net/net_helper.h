@@ -128,7 +128,7 @@ namespace net_utils
       m_ssl = ssl;
 			try
 			{
-				m_ssl_socket.lowest_layer().close();
+				m_ssl_socket.next_layer().close();
 
 				// Set SSL options
 				// disable sslv2
@@ -157,11 +157,11 @@ namespace net_utils
 				boost::asio::ip::tcp::endpoint remote_endpoint(*iterator);
 
 
-				m_ssl_socket.lowest_layer().open(remote_endpoint.protocol());
+				m_ssl_socket.next_layer().open(remote_endpoint.protocol());
 				if(bind_ip != "0.0.0.0" && bind_ip != "0" && bind_ip != "" )
 				{
 					boost::asio::ip::tcp::endpoint local_endpoint(boost::asio::ip::address::from_string(addr.c_str()), 0);
-					m_ssl_socket.lowest_layer().bind(local_endpoint);
+					m_ssl_socket.next_layer().bind(local_endpoint);
 				}
 
 				
@@ -170,13 +170,13 @@ namespace net_utils
 
 				boost::system::error_code ec = boost::asio::error::would_block;
 
-				m_ssl_socket.lowest_layer().async_connect(remote_endpoint, boost::lambda::var(ec) = boost::lambda::_1);
+				m_ssl_socket.next_layer().async_connect(remote_endpoint, boost::lambda::var(ec) = boost::lambda::_1);
 				while (ec == boost::asio::error::would_block)
 				{	
 					m_io_service.run_one(); 
 				}
 				
-				if (!ec && m_ssl_socket.lowest_layer().is_open())
+				if (!ec && m_ssl_socket.next_layer().is_open())
 				{
 					m_connected = true;
 					m_deadline.expires_at(std::chrono::steady_clock::time_point::max());
@@ -186,7 +186,7 @@ namespace net_utils
 						m_ssl_socket.set_verify_mode(boost::asio::ssl::verify_peer);
 						m_ssl_socket.set_verify_callback(boost::bind(&blocked_mode_client::verify_cert, this, _1, _2));
 						// Handshake
-						m_ssl_socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
+						m_ssl_socket.next_layer().set_option(boost::asio::ip::tcp::no_delay(true));
 						m_ssl_socket.handshake(boost::asio::ssl::stream_base::client);
 					}
 					return true;
@@ -233,7 +233,7 @@ namespace net_utils
 					boost::system::error_code ec = boost::asio::error::would_block;
 					if(m_ssl)
 						shutdown_ssl();
-					m_ssl_socket.lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both);
+					m_ssl_socket.next_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both);
 				}
 			}
 			
@@ -369,7 +369,7 @@ namespace net_utils
 
 		bool is_connected()
 		{
-			return m_connected && m_ssl_socket.lowest_layer().is_open();
+			return m_connected && m_ssl_socket.next_layer().is_open();
 		}
 
 		inline 
@@ -544,15 +544,15 @@ namespace net_utils
 				shutdown_ssl();
 			}
 
-			m_ssl_socket.lowest_layer().cancel(ec);
+			m_ssl_socket.next_layer().cancel(ec);
 			if(ec)
 				MDEBUG("Problems at cancel: " << ec.message());
 
-			m_ssl_socket.lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+			m_ssl_socket.next_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
 			if(ec)
 				MDEBUG("Problems at shutdown: " << ec.message());
 
-			m_ssl_socket.lowest_layer().close(ec);
+			m_ssl_socket.next_layer().close(ec);
 			if(ec)
 				MDEBUG("Problems at close: " << ec.message());
 
@@ -589,7 +589,7 @@ namespace net_utils
 				// connect(), read_line() or write_line() functions to return.
 				LOG_PRINT_L3("Timed out socket");
         m_connected = false;
-				m_ssl_socket.lowest_layer().close();
+				m_ssl_socket.next_layer().close();
         
 				// There is no longer an active deadline. The expiry is set to positive
 				// infinity so that the actor takes no action until a new deadline is set.
@@ -732,9 +732,9 @@ namespace net_utils
 				// asynchronous operations are cancelled. This allows the blocked
 				// connect(), read_line() or write_line() functions to return.
 				LOG_PRINT_L3("Timed out socket");
-				m_ssl_socket.lowest_layer().close();
+				m_ssl_socket.next_layer().close();
 				// boost::system::error_code ignored_ec;
-				// m_ssl_socket.lowest_layer().close(ignored_ec);
+				// m_ssl_socket.next_layer().close(ignored_ec);
 
 				// There is no longer an active deadline. The expiry is set to positive
 				// infinity so that the actor takes no action until a new deadline is set.
