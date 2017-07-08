@@ -3601,6 +3601,32 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions(std::vector<crypto
   }
 }
 
+
+bool wallet2::tx_add_fake_output(std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, uint64_t global_index, const crypto::public_key& tx_public_key, const rct::key& mask, uint64_t real_index, bool unlocked) const
+{
+  if (!unlocked) // don't add locked outs
+    return false;
+  if (global_index == real_index) // don't re-add real one
+    return false;
+  auto item = std::make_tuple(global_index, tx_public_key, mask);
+  if (std::find(outs.back().begin(), outs.back().end(), item) != outs.back().end()) // don't add duplicates
+    return false;
+  outs.back().push_back(item);
+  return true;
+}
+
+bool wallet2::light_wallet_parse_rct_str(const std::string& rct_string, rct::key& mask) const
+{
+  // rct string is empty if output is non RCT
+  if (rct_string.empty())
+    return false;
+
+  // o.rct is a string with length 64+64+64 (<rct commit> + <encrypted mask> + <rct amount>)
+  string_tools::hex_to_pod(rct_string.substr(0,64), mask);
+  return true;
+}
+
+
 void wallet2::light_wallet_get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, const std::list<size_t> &selected_transfers, size_t fake_outputs_count) {
   
   MDEBUG("LIGHTWALLET - Getting random outs");
@@ -3676,25 +3702,18 @@ void wallet2::light_wallet_get_outs(std::vector<std::vector<tools::wallet2::get_
 
       LOG_PRINT_L2("Index " << i << "/" << light_wallet_requested_outputs_count << ": idx " << ores.amount_outs[amount_key].outputs[i].global_index << " (real " << td.m_global_output_index << "), unlocked " << "(always in light)" << ", key " << ores.amount_outs[0].outputs[i].public_key);
       
-      uint64_t global_index = boost::lexical_cast<uint64_t>(ores.amount_outs[amount_key].outputs[i].global_index);    
-      if (global_index == td.m_global_output_index) // don't re-add real one
-        continue;
-      
-      // add mask for rct and non rct outputs
+      // Convert light wallet string data to proper data structures
+      crypto::public_key tx_public_key;
       rct::key mask;
-      if(!ores.amount_outs[amount_key].outputs[i].rct.empty())
-        string_tools::hex_to_pod(ores.amount_outs[amount_key].outputs[i].rct.substr(0,64), mask);
-      else
+      string_tools::hex_to_pod(ores.amount_outs[amount_key].outputs[i].public_key, tx_public_key);
+      uint64_t global_index = boost::lexical_cast<uint64_t>(ores.amount_outs[amount_key].outputs[i].global_index);
+      if(!light_wallet_parse_rct_str(ores.amount_outs[amount_key].outputs[i].rct, mask))
         mask = rct::zeroCommit(td.amount());
       
-      crypto::public_key tx_public_key = AUTO_VAL_INIT(tx_public_key);
-      string_tools::hex_to_pod(ores.amount_outs[amount_key].outputs[i].public_key, tx_public_key);    
-      auto item = std::make_tuple(global_index, tx_public_key, mask);
-      if (std::find(outs.back().begin(), outs.back().end(), item) != outs.back().end()) // don't add duplicates
-        continue;
-      outs.back().push_back(item);
-      MDEBUG("added fake output " << ores.amount_outs[amount_key].outputs[i].public_key);
-      MDEBUG("index " << global_index);
+      if (tx_add_fake_output(outs, global_index, tx_public_key, mask, td.m_global_output_index, true)) {
+        MDEBUG("added fake output " << ores.amount_outs[amount_key].outputs[i].public_key);
+        MDEBUG("index " << global_index);
+      }
     }
 
     THROW_WALLET_EXCEPTION_IF(outs.back().size() < fake_outputs_count + 1 , error::wallet_internal_error, "Not enough fake outputs found" );
@@ -3713,24 +3732,11 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
 {
   LOG_PRINT_L2("fake_outputs_count: " << fake_outputs_count);
   outs.clear();
-  
-  // Handle zero fake outputs scenario
-  if(fake_outputs_count < 1) {
-    for (size_t idx: selected_transfers)
-    {
-      const transfer_details &td = m_transfers[idx];
-      std::vector<get_outs_entry> v;
-      const rct::key mask = td.is_rct() ? rct::commit(td.amount(), td.m_mask) : rct::zeroCommit(td.amount());
-      v.push_back(std::make_tuple(td.m_global_output_index, td.get_public_key(), mask));
-      outs.push_back(v);
-    }
-    return;
-  }
-  
-  if(m_light_wallet) {
+
+  if(m_light_wallet && fake_outputs_count > 0) {
     light_wallet_get_outs(outs, selected_transfers, fake_outputs_count);
     return;
-  } 
+  }
 
   if (fake_outputs_count > 0)
   {
@@ -3928,14 +3934,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
       {
         size_t i = base + order[o];
         LOG_PRINT_L2("Index " << i << "/" << requested_outputs_count << ": idx " << req.outputs[i].index << " (real " << td.m_global_output_index << "), unlocked " << daemon_resp.outs[i].unlocked << ", key " << daemon_resp.outs[i].key);
-        if (req.outputs[i].index == td.m_global_output_index) // don't re-add real one
-          continue;
-        if (!daemon_resp.outs[i].unlocked) // don't add locked outs
-          continue;
-        auto item = std::make_tuple(req.outputs[i].index, daemon_resp.outs[i].key, daemon_resp.outs[i].mask);
-        if (std::find(outs.back().begin(), outs.back().end(), item) != outs.back().end()) // don't add duplicates
-          continue;
-        outs.back().push_back(item);
+        tx_add_fake_output(outs, req.outputs[i].index, daemon_resp.outs[i].key, daemon_resp.outs[i].mask, td.m_global_output_index, daemon_resp.outs[i].unlocked);
       }
       if (outs.back().size() < fake_outputs_count + 1)
       {
@@ -3949,6 +3948,17 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
       base += requested_outputs_count;
     }
     THROW_WALLET_EXCEPTION_IF(!scanty_outs.empty(), error::not_enough_outs_to_mix, scanty_outs, fake_outputs_count);
+  }
+  else
+  {
+    for (size_t idx: selected_transfers)
+    {
+      const transfer_details &td = m_transfers[idx];
+      std::vector<get_outs_entry> v;
+      const rct::key mask = td.is_rct() ? rct::commit(td.amount(), td.m_mask) : rct::zeroCommit(td.amount());
+      v.push_back(std::make_tuple(td.m_global_output_index, td.get_public_key(), mask));
+      outs.push_back(v);
+    }
   }
 }
 
@@ -4408,7 +4418,7 @@ static uint32_t get_count_above(const std::vector<wallet2::transfer_details> &tr
   return count;
 }
 
-bool wallet2::light_wallet_login(bool new_address)
+bool wallet2::light_wallet_login(bool &new_address)
 {
   MDEBUG("Light wallet login request");
   cryptonote::COMMAND_RPC_LOGIN::request request;
@@ -4480,14 +4490,8 @@ void wallet2::light_wallet_get_unspent_outs()
       spent = false;
 
       // Check if key image is for real
-      crypto::key_image calculated_key_image;
-      cryptonote::keypair in_ephemeral;
-      //TODO: Add validation: key_imageIsNotNull
       string_tools::hex_to_pod(ski, unspent_key_image);
-
-      cryptonote::generate_key_image_helper(get_account().get_keys(), tx_public_key, o.index, in_ephemeral, calculated_key_image);
-      
-      if(unspent_key_image == calculated_key_image){
+      if(light_wallet_key_image_is_ours(unspent_key_image, tx_public_key, o.index)){
         MDEBUG("Output " << o.public_key << " is spent. Key image: " <<  ski);
         spent = true;
         break;
@@ -4541,40 +4545,23 @@ void wallet2::light_wallet_get_unspent_outs()
     td.m_tx.vout.resize(td.m_internal_output_index + 1);
     td.m_tx.vout[td.m_internal_output_index] = txout;
     
-   if (!o.rct.empty()) //TODO: are all outputs with a rct value acutally a rct output?
-   {
-      // o.rct is a string with length 64+64+64 (<rct commit> + <encrypted mask> + <rct amount>)
-      // We decrypt the mask and save it to td.m_mask.
-      rct::key mm_rct_commit;
-      rct::key encrypted_mask;
-      string_tools::hex_to_pod(o.rct.substr(0,64), mm_rct_commit);
-      string_tools::hex_to_pod(o.rct.substr(64,64), encrypted_mask);
-      
-      crypto::key_derivation derivation;
-      generate_key_derivation(tx_pub_key, get_account().get_keys().m_view_secret_key, derivation);
-      crypto::secret_key scalar;
-      crypto::derivation_to_scalar(derivation, td.m_internal_output_index, scalar);
-      rct::key decrypted_mask;
-      sc_sub(decrypted_mask.bytes,encrypted_mask.bytes,rct::hash_to_scalar(rct::sk2rct(scalar)).bytes);
+    // Add unlock time and coinbase bool got from get_address_txs api call
+    std::unordered_map<crypto::hash,address_tx>::const_iterator found = m_light_wallet_address_txs.find(txid);
+    THROW_WALLET_EXCEPTION_IF(found == m_light_wallet_address_txs.end(), error::wallet_internal_error, "Lightwallet: tx not found in m_light_wallet_address_txs");
+    bool miner_tx = found->second.m_coinbase;
+    td.m_tx.unlock_time = found->second.m_unlock_time;
 
-      rct::key new_rct_commit = rct::commit(td.amount(),decrypted_mask);
-      
-      // Make sure rct commit is the same 
-      if(!(mm_rct_commit == new_rct_commit)){ 
-        MERROR("decrypted mask is wrong. rct commit: " << string_tools::pod_to_hex(mm_rct_commit) << " != " << string_tools::pod_to_hex(new_rct_commit));
-        //TODO: Throw
-        assert(false);
-      }
-      
-      td.m_mask = decrypted_mask;
+    if (!o.rct.empty())
+    {
+       light_wallet_parse_rct_str(o.rct, td.m_mask);
+       td.m_rct = true;
+    }
+    // is coinbase?
+    else if (miner_tx)
+    {
+      td.m_mask = rct::identity();
       td.m_rct = true;
     }
-    // TODO: howto check if tx is a miner_tx with mymonero api? 
-    // else if (miner_tx && tx.version == 2)
-    // {
-    //   td.m_mask = rct::identity();
-    //   td.m_rct = true;
-    // }
     else
     {
       td.m_mask = rct::identity();
@@ -4615,6 +4602,28 @@ bool wallet2::light_wallet_get_address_info(cryptonote::COMMAND_RPC_GET_ADDRESS_
   return true;
 }
 
+bool wallet2::light_wallet_key_image_is_ours(const crypto::key_image& key_image, const crypto::public_key& tx_public_key, uint64_t out_index)
+{
+  // Lookup key image from cache
+  std::map<uint64_t, crypto::key_image> index_keyimage_map;
+  std::unordered_map<crypto::public_key, std::map<uint64_t, crypto::key_image> >::const_iterator found_pub_key = m_key_image_cache.find(tx_public_key);
+  if(found_pub_key != m_key_image_cache.end()) {
+    // pub key found. key image for index cached?
+    index_keyimage_map = found_pub_key->second;
+    std::map<uint64_t,crypto::key_image>::const_iterator index_found = index_keyimage_map.find(out_index);
+    if(index_found != index_keyimage_map.end())
+      return key_image == index_found->second;
+  }
+
+  // Not in cache - calculate key image
+  crypto::key_image calculated_key_image;
+  cryptonote::keypair in_ephemeral;
+  cryptonote::generate_key_image_helper(get_account().get_keys(), tx_public_key, out_index, in_ephemeral, calculated_key_image);
+  index_keyimage_map.emplace(out_index, calculated_key_image);
+  m_key_image_cache.emplace(tx_public_key, index_keyimage_map);
+  return key_image == calculated_key_image;
+}
+
 void wallet2::light_wallet_get_address_txs()
 {
   MDEBUG("Refreshing light wallet");
@@ -4650,18 +4659,13 @@ void wallet2::light_wallet_get_address_txs()
     // Check key image
     for(const auto &so: t.spent_outputs)
     {
-      crypto::key_image calculated_key_image;
-      cryptonote::keypair in_ephemeral;
-      crypto::public_key tx_public_key = AUTO_VAL_INIT(tx_public_key);
-      string_tools::hex_to_pod(so.tx_pub_key, tx_public_key);
 
-      cryptonote::generate_key_image_helper(get_account().get_keys(), tx_public_key, so.out_index, in_ephemeral, calculated_key_image);
-
-      // mm key image;
+      crypto::public_key tx_public_key;
       crypto::key_image key_image;
+      string_tools::hex_to_pod(so.tx_pub_key, tx_public_key);
       string_tools::hex_to_pod(so.key_image, key_image);
 
-      if(key_image != calculated_key_image){
+      if(!light_wallet_key_image_is_ours(key_image, tx_public_key, so.out_index)) {
         uint64_t amount = boost::lexical_cast<uint64_t>(so.amount);
         THROW_WALLET_EXCEPTION_IF(amount > total_sent, error::wallet_internal_error, "Lightwallet: total sent is negative!");
         total_sent -= amount;
@@ -4680,12 +4684,22 @@ void wallet2::light_wallet_get_address_txs()
     // Parse timestamp
     std::tm tm = {};
     std::istringstream ss(t.timestamp);
-    uint64_t ts;
+    uint64_t ts = 0; // use epoch time if parsing fails
     if (ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S"))
        ts = std::mktime(&tm);
-    else
-      MERROR("Date parsing error: " << t.timestamp);
-    
+
+    // lightwallet specific info
+    address_tx address_tx;
+    address_tx.m_tx_hash = tx_hash;
+    address_tx.m_amount       = total_received - total_sent;
+    address_tx.m_block_height = t.height;
+    address_tx.m_unlock_time  = t.unlock_time;
+    address_tx.m_timestamp = ts;
+    address_tx.m_coinbase  = t.coinbase;
+    address_tx.m_mempool  = t.mempool;
+    m_light_wallet_address_txs.emplace(tx_hash,address_tx);
+
+    // populate data needed for history (m_payments, m_unconfirmed_payments, m_confirmed_txs)
     // INCOMING transfers
     if(total_received > total_sent) {        
       payment_details payment;
@@ -4706,7 +4720,7 @@ void wallet2::light_wallet_get_address_txs()
         }
       } else {
         if (std::find(payments_txs.begin(), payments_txs.end(), tx_hash) == payments_txs.end()) {
-          m_payments.emplace(payment_id, payment);
+          m_payments.emplace(tx_hash, payment);
           MDEBUG("Added new confirmed PAYMENT");
         } else {
             MDEBUG("confirmed in already added");

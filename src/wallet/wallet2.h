@@ -179,6 +179,12 @@ namespace tools
       uint64_t m_timestamp;
     };
 
+    struct address_tx : payment_details
+    {
+      uint64_t m_coinbase;
+      uint64_t m_mempool;
+    };
+
     struct unconfirmed_transfer_details
     {
       cryptonote::transaction_prefix m_tx;
@@ -617,12 +623,15 @@ namespace tools
     // get_address_info 
     bool light_wallet_get_address_info(cryptonote::COMMAND_RPC_GET_ADDRESS_INFO::response &response);
     // Login. new_address is true if address hasn't been used on lw node before.
-    bool light_wallet_login(bool new_address);
+    bool light_wallet_login(bool &new_address);
     // Send an import request to lw node. returns info about import fee, address and payment_id
     bool light_wallet_import_wallet_request(cryptonote::COMMAND_RPC_IMPORT_WALLET_REQUEST::response &response);
     // get random outputs from light wallet server
     void light_wallet_get_outs(std::vector<std::vector<get_outs_entry>> &outs, const std::list<size_t> &selected_transfers, size_t fake_outputs_count);
-    
+    // Parse rct string
+    bool light_wallet_parse_rct_str(const std::string& rct_string, rct::key& mask) const;
+    // check if key image is ours
+    bool light_wallet_key_image_is_ours(const crypto::key_image& key_image, const crypto::public_key& tx_public_key, uint64_t out_index);
 
   private:
     /*!
@@ -672,6 +681,7 @@ namespace tools
     void set_spent(size_t idx, uint64_t height);
     void set_unspent(size_t idx);
     void get_outs(std::vector<std::vector<get_outs_entry>> &outs, const std::list<size_t> &selected_transfers, size_t fake_outputs_count);
+    bool tx_add_fake_output(std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, uint64_t global_index, const crypto::public_key& tx_public_key, const rct::key& mask, uint64_t real_index, bool unlocked) const;
     bool wallet_generate_key_image_helper(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki);
     crypto::public_key get_tx_pub_key_from_received_outs(const tools::wallet2::transfer_details &td) const;
     bool should_pick_a_second_output(bool use_rct, size_t n_transfers, const std::vector<size_t> &unused_transfers_indices, const std::vector<size_t> &unused_dust_indices) const;
@@ -730,6 +740,11 @@ namespace tools
     bool m_light_wallet; /* sends view key to daemon for scanning */
     uint64_t m_light_wallet_scanned_block_height;
     uint64_t m_light_wallet_blockchain_height;
+    // Light wallet info needed to populate m_payment requires 2 separate api calls (get_address_txs and get_unspent_outs)
+    // We save the info from the first call in m_light_wallet_address_txs for easier lookup. 
+    std::unordered_map<crypto::hash, address_tx> m_light_wallet_address_txs;
+    // store calculated key image for faster lookup
+    std::unordered_map<crypto::public_key, std::map<uint64_t, crypto::key_image> > m_key_image_cache;
   };
 }
 BOOST_CLASS_VERSION(tools::wallet2, 18)
