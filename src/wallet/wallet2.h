@@ -149,9 +149,7 @@ namespace tools
 
       bool is_rct() const { return m_rct; }
       uint64_t amount() const { return m_amount; }
-      const crypto::public_key &get_public_key() const { 
-        return boost::get<const cryptonote::txout_to_key>(m_tx.vout[m_internal_output_index].target).key; 
-      }
+      const crypto::public_key &get_public_key() const { return boost::get<const cryptonote::txout_to_key>(m_tx.vout[m_internal_output_index].target).key; }
 
       BEGIN_SERIALIZE_OBJECT()
         FIELD(m_block_height)
@@ -374,10 +372,9 @@ namespace tools
     */
     bool light_wallet() const { return m_light_wallet; }
     void set_light_wallet(bool light_wallet) { m_light_wallet = light_wallet; }
-    
     uint64_t get_light_wallet_scanned_block_height() const { return m_light_wallet_scanned_block_height; }
-    uint64_t get_light_wallet_blockchain_height() const { return m_light_wallet_blockchain_height; }    
-    
+    uint64_t get_light_wallet_blockchain_height() const { return m_light_wallet_blockchain_height; }
+
     bool get_seed(std::string& electrum_words) const;
     /*!
      * \brief Gets the seed language
@@ -614,13 +611,13 @@ namespace tools
     bool parse_uri(const std::string &uri, std::string &address, std::string &payment_id, uint64_t &amount, std::string &tx_description, std::string &recipient_name, std::vector<std::string> &unknown_parameters, std::string &error);
 
     uint64_t get_blockchain_height_by_date(uint16_t year, uint8_t month, uint8_t day);    // 1<=month<=12, 1<=day<=31
-    
-    // Light wallet functions
+
+    // Light wallet specific functions
     // fetch unspent outs from lw node and store in m_transfers
     void light_wallet_get_unspent_outs();
     // fetch txs and store in m_payments
     void light_wallet_get_address_txs();
-    // get_address_info 
+    // get_address_info
     bool light_wallet_get_address_info(cryptonote::COMMAND_RPC_GET_ADDRESS_INFO::response &response);
     // Login. new_address is true if address hasn't been used on lw node before.
     bool light_wallet_login(bool &new_address);
@@ -718,7 +715,7 @@ namespace tools
     bool m_restricted;
     std::string seed_language; /*!< Language of the mnemonics (seed). */
     bool is_old_file_format; /*!< Whether the wallet file is of an old file format */
-    bool m_watch_only; /*!< no spend key */ 
+    bool m_watch_only; /*!< no spend key */
     bool m_always_confirm_transfers;
     bool m_print_ring_members;
     bool m_store_tx_info; /*!< request txkey to be returned in RPC, and store in the wallet cache file */
@@ -735,13 +732,14 @@ namespace tools
     bool m_is_initialized;
     NodeRPCProxy m_node_rpc_proxy;
     std::unordered_set<crypto::hash> m_scanned_pool_txs[2];
-    
+
     // Light wallet
     bool m_light_wallet; /* sends view key to daemon for scanning */
     uint64_t m_light_wallet_scanned_block_height;
     uint64_t m_light_wallet_blockchain_height;
+    uint64_t m_light_wallet_per_kb_fee = FEE_PER_KB;
     // Light wallet info needed to populate m_payment requires 2 separate api calls (get_address_txs and get_unspent_outs)
-    // We save the info from the first call in m_light_wallet_address_txs for easier lookup. 
+    // We save the info from the first call in m_light_wallet_address_txs for easier lookup.
     std::unordered_map<crypto::hash, address_tx> m_light_wallet_address_txs;
     // store calculated key image for faster lookup
     std::unordered_map<crypto::public_key, std::map<uint64_t, crypto::key_image> > m_key_image_cache;

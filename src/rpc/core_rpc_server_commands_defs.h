@@ -367,9 +367,11 @@ namespace cryptonote
       {
         std::string amount;
         std::list<output> outputs;
+        uint64_t per_kb_fee;
         BEGIN_KV_SERIALIZE_MAP()
           KV_SERIALIZE(amount)
           KV_SERIALIZE(outputs)
+          KV_SERIALIZE(per_kb_fee)
         END_KV_SERIALIZE_MAP()
       };
   };

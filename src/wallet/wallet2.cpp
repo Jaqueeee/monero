@@ -1686,6 +1686,7 @@ void wallet2::refresh(uint64_t start_height, uint64_t & blocks_fetched, bool& re
     light_wallet_get_address_info(res);
     m_light_wallet_scanned_block_height = res.scanned_block_height;
     m_light_wallet_blockchain_height = res.blockchain_height;
+    m_local_bc_height = res.blockchain_height;
     
     MDEBUG("lw scanned block height: " <<  m_light_wallet_scanned_block_height);
     MDEBUG("lw blockchain height: " <<  m_light_wallet_blockchain_height);
@@ -2792,7 +2793,7 @@ bool wallet2::is_transfer_unlocked(const transfer_details& td) const
   if(!is_tx_spendtime_unlocked(td.m_tx.unlock_time, td.m_block_height))
     return false;
 
-  if(td.m_block_height + CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE > m_blockchain.size())
+  if(td.m_block_height + CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE > m_local_bc_height)
     return false;
 
   return true;
@@ -2803,7 +2804,7 @@ bool wallet2::is_tx_spendtime_unlocked(uint64_t unlock_time, uint64_t block_heig
   if(unlock_time < CRYPTONOTE_MAX_BLOCK_NUMBER)
   {
     //interpret as block index
-    if(m_blockchain.size()-1 + CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_BLOCKS >= unlock_time)
+    if(m_local_bc_height-1 + CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_BLOCKS >= unlock_time)
       return true;
     else
       return false;
@@ -3116,7 +3117,7 @@ void wallet2::commit_tx(pending_tx& ptx)
     oreq.view_key = string_tools::pod_to_hex(get_account().get_keys().m_view_secret_key);
     oreq.tx = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx.tx));
     m_daemon_rpc_mutex.lock();
-    bool r = epee::net_utils::invoke_http_json("/submit_raw_tx", oreq, ores, m_http_client, std::chrono::seconds(5), "POST");
+    bool r = epee::net_utils::invoke_http_json("/submit_raw_tx", oreq, ores, m_http_client, std::chrono::seconds(30), "POST");
     m_daemon_rpc_mutex.unlock();
     THROW_WALLET_EXCEPTION_IF(!r, error::no_connection_to_daemon, "submit_raw_tx");
     THROW_WALLET_EXCEPTION_IF(ores.status != "OK", error::tx_rejected, ptx.tx, ores.status, ores.error);
@@ -3476,6 +3477,8 @@ uint64_t wallet2::get_dynamic_per_kb_fee_estimate()
 //----------------------------------------------------------------------------------------------------
 uint64_t wallet2::get_per_kb_fee()
 {
+  if(m_light_wallet)
+    return m_light_wallet_per_kb_fee;
   bool use_dyn_fee = use_fork_rules(HF_VERSION_DYNAMIC_FEE, -720 * 1);
   if (!use_dyn_fee)
     return FEE_PER_KB;
@@ -3647,7 +3650,7 @@ void wallet2::light_wallet_get_outs(std::vector<std::vector<tools::wallet2::get_
   
   oreq.count = light_wallet_requested_outputs_count;
   m_daemon_rpc_mutex.lock();
-  bool r = epee::net_utils::invoke_http_json("/get_random_outs", oreq, ores, m_http_client, std::chrono::seconds(5), "POST");
+  bool r = epee::net_utils::invoke_http_json("/get_random_outs", oreq, ores, m_http_client, std::chrono::seconds(30), "POST");
   m_daemon_rpc_mutex.unlock();
   THROW_WALLET_EXCEPTION_IF(!r, error::no_connection_to_daemon, "get_random_outs");
   THROW_WALLET_EXCEPTION_IF(ores.amount_outs.empty() , error::wallet_internal_error, "No outputs recieved from light wallet node. Error: " + ores.Error);
@@ -4428,7 +4431,7 @@ bool wallet2::light_wallet_login(bool &new_address)
   // Always create account if it doesnt exist.
   request.create_account = true;
   m_daemon_rpc_mutex.lock();
-  bool r = epee::net_utils::invoke_http_json("/login", request, response, m_http_client, std::chrono::seconds(5), "POST");
+  bool r = epee::net_utils::invoke_http_json("/login", request, response, m_http_client, std::chrono::seconds(10), "POST");
   m_daemon_rpc_mutex.unlock();
   THROW_WALLET_EXCEPTION_IF(!r, error::no_connection_to_daemon, "login");
 
@@ -4446,7 +4449,7 @@ bool wallet2::light_wallet_import_wallet_request(cryptonote::COMMAND_RPC_IMPORT_
   oreq.address = get_account().get_public_address_str(m_testnet);
   oreq.view_key = string_tools::pod_to_hex(get_account().get_keys().m_view_secret_key);
   m_daemon_rpc_mutex.lock();
-  bool r = epee::net_utils::invoke_http_json("/import_wallet_request", oreq, response, m_http_client, std::chrono::seconds(5), "POST");
+  bool r = epee::net_utils::invoke_http_json("/import_wallet_request", oreq, response, m_http_client, std::chrono::seconds(10), "POST");
   m_daemon_rpc_mutex.unlock();
   THROW_WALLET_EXCEPTION_IF(!r, error::no_connection_to_daemon, "import_wallet_request");
 
@@ -4467,11 +4470,11 @@ void wallet2::light_wallet_get_unspent_outs()
   oreq.view_key = string_tools::pod_to_hex(get_account().get_keys().m_view_secret_key);
 
   m_daemon_rpc_mutex.lock();
-  bool r = epee::net_utils::invoke_http_json("/get_unspent_outs", oreq, ores, m_http_client, std::chrono::seconds(5), "POST");
+  bool r = epee::net_utils::invoke_http_json("/get_unspent_outs", oreq, ores, m_http_client, std::chrono::seconds(10), "POST");
   m_daemon_rpc_mutex.unlock();
   THROW_WALLET_EXCEPTION_IF(!r, error::no_connection_to_daemon, "get_unspent_outs");
   
-
+  m_light_wallet_per_kb_fee = ores.per_kb_fee;
   
   std::unordered_map<crypto::hash,bool> transfers_txs;
   for(const auto &t: m_transfers)
@@ -4492,7 +4495,7 @@ void wallet2::light_wallet_get_unspent_outs()
       // Check if key image is for real
       string_tools::hex_to_pod(ski, unspent_key_image);
       if(light_wallet_key_image_is_ours(unspent_key_image, tx_public_key, o.index)){
-        MDEBUG("Output " << o.public_key << " is spent. Key image: " <<  ski);
+        // MTRACE("Output " << o.public_key << " is spent. Key image: " <<  ski);
         spent = true;
         break;
       } {
@@ -4511,7 +4514,6 @@ void wallet2::light_wallet_get_unspent_outs()
     for(auto &t: m_transfers){
       if(t.get_public_key() == public_key) {
         t.m_spent = spent;
-        MTRACE(string_tools::pod_to_hex(public_key) << " already in m_transfers - Not adding");
         add_transfer = false;
         break;
       }
@@ -4520,7 +4522,6 @@ void wallet2::light_wallet_get_unspent_outs()
     if(!add_transfer)
       continue;
     
-    MTRACE("Adding output " << o.public_key);
     m_transfers.push_back(boost::value_initialized<transfer_details>());
     transfer_details& td = m_transfers.back();
     
@@ -4571,20 +4572,7 @@ void wallet2::light_wallet_get_unspent_outs()
       set_unspent(m_transfers.size()-1);
     m_key_images[td.m_key_image] = m_transfers.size()-1;
     m_pub_keys[td.get_public_key()] = m_transfers.size()-1;
-    if(spent)
-      MTRACE("Spent output "<< o.amount << " xmr added to m_transfers tx_hash: " << o.tx_hash);
-    else
-      MTRACE("Unspent output "<< o.amount << " xmr added to m_transfers tx_hash: " << o.tx_hash);      
   }
-  MTRACE("dumping m_transfers");
-  for(auto &t: m_transfers)
-  {
-    if(t.m_spent)
-      MTRACE("Spent " << t.amount() << " xmr public_key: " << string_tools::pod_to_hex(t.m_txid));
-    else
-      MTRACE("Unspent " << t.amount() << " xmr public_key: " << string_tools::pod_to_hex(t.m_txid));    
-  }
-
 }
 
 bool wallet2::light_wallet_get_address_info(cryptonote::COMMAND_RPC_GET_ADDRESS_INFO::response &response)
@@ -4712,18 +4700,12 @@ void wallet2::light_wallet_get_address_txs()
       if (t.mempool) {   
         if (std::find(unconfirmed_payments_txs.begin(), unconfirmed_payments_txs.end(), tx_hash) == unconfirmed_payments_txs.end()) {
           m_unconfirmed_payments.emplace(payment_id, payment);
-          MDEBUG("Added new UNCONFIRMED PAYMENT");
           if (0 != m_callback)
             m_callback->on_unconfirmed_money_received(t.height, payment.m_tx_hash, payment.m_amount);
-        } else {
-            MDEBUG("Unconfirmed in already added");
         }
       } else {
         if (std::find(payments_txs.begin(), payments_txs.end(), tx_hash) == payments_txs.end()) {
           m_payments.emplace(tx_hash, payment);
-          MDEBUG("Added new confirmed PAYMENT");
-        } else {
-            MDEBUG("confirmed in already added");
         }
       }
         
@@ -4736,12 +4718,7 @@ void wallet2::light_wallet_get_address_txs()
       ctd.m_payment_id = payment_id;
       ctd.m_block_height = t.height;
       ctd.m_timestamp = ts;
-      auto in_confirmed = m_confirmed_txs.emplace(tx_hash,ctd);
-      if(in_confirmed.second) {
-        MDEBUG("New outgoing found");
-      } else {
-        MDEBUG("OUTGOING already added");  
-      }
+      m_confirmed_txs.emplace(tx_hash,ctd);
     }    
   }
     
