@@ -338,7 +338,6 @@ namespace cryptonote
         uint64_t  index;
         uint64_t global_index;
         std::string rct;
-        uint64_t tx_id;
         std::string tx_hash;
         std::string tx_pub_key;
         std::string tx_prefix_hash;
@@ -353,7 +352,6 @@ namespace cryptonote
           KV_SERIALIZE(index)
           KV_SERIALIZE(global_index)
           KV_SERIALIZE(rct)
-          KV_SERIALIZE(tx_id)
           KV_SERIALIZE(tx_hash)
           KV_SERIALIZE(tx_pub_key)
           KV_SERIALIZE(tx_prefix_hash)
