@@ -184,7 +184,7 @@ namespace net_utils
 					if(m_ssl) {
 						// Verify host certificate (depends on set_default_verify_paths())
 						m_ssl_socket.set_verify_mode(boost::asio::ssl::verify_peer);
-						m_ssl_socket.set_verify_callback(boost::bind(&blocked_mode_client::verify_cert, this, _1, _2));
+						m_ssl_socket.set_verify_callback(boost::bind(&blocked_mode_client::debug_print_cert, this, _1, _2));
 						// Handshake
 						m_ssl_socket.next_layer().set_option(boost::asio::ip::tcp::no_delay(true));
 						m_ssl_socket.handshake(boost::asio::ssl::stream_base::client);
@@ -211,14 +211,14 @@ namespace net_utils
 			return true;
 		}
 
-		bool verify_cert(bool preverified, boost::asio::ssl::verify_context& ctx)
+		bool debug_print_cert(bool preverified, boost::asio::ssl::verify_context& ctx)
 		{
 			// For debugging purposes we print the certificate and the preverified bool
 			char subject_name[256];
 			X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
 			X509_NAME_oneline(X509_get_subject_name(cert), subject_name, sizeof(subject_name));
-			MDEBUG ("Verifying " << subject_name);
-			MDEBUG(preverified);
+			MTRACE("Verifying " << subject_name);
+			MTRACE(preverified);
 			return preverified;
 		 }
 
@@ -332,8 +332,7 @@ namespace net_utils
 				*/
 				boost::system::error_code ec;
 
-				size_t writen;
-				writen = write(data, sz, ec);
+				size_t writen = write(data, sz, ec);
 
 				if (!writen || ec)
 				{
@@ -525,22 +524,17 @@ namespace net_utils
 		{
 			m_deadline.cancel();
 			boost::system::error_code ec;
-			if(m_ssl) {
+			if(m_ssl)
 				shutdown_ssl();
-			}
-
 			m_ssl_socket.next_layer().cancel(ec);
 			if(ec)
 				MDEBUG("Problems at cancel: " << ec.message());
-
 			m_ssl_socket.next_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
 			if(ec)
 				MDEBUG("Problems at shutdown: " << ec.message());
-
 			m_ssl_socket.next_layer().close(ec);
 			if(ec)
 				MDEBUG("Problems at close: " << ec.message());
-
 			boost::interprocess::ipcdetail::atomic_write32(&m_shutdowned, 1);
       m_connected = false;
 			return true;
@@ -575,7 +569,7 @@ namespace net_utils
 				LOG_PRINT_L3("Timed out socket");
         m_connected = false;
 				m_ssl_socket.next_layer().close();
-        
+
 				// There is no longer an active deadline. The expiry is set to positive
 				// infinity so that the actor takes no action until a new deadline is set.
 				m_deadline.expires_at(std::chrono::steady_clock::time_point::max());
@@ -697,8 +691,7 @@ namespace net_utils
 				
 				boost::system::error_code ec;
 
-				size_t writen;
-				writen = write(data, sz, ec);
+				size_t writen = write(data, sz, ec);
 				
 				if (!writen || ec)
 				{
@@ -741,8 +734,6 @@ namespace net_utils
 				// connect(), read_line() or write_line() functions to return.
 				LOG_PRINT_L3("Timed out socket");
 				m_ssl_socket.next_layer().close();
-				// boost::system::error_code ignored_ec;
-				// m_ssl_socket.next_layer().close(ignored_ec);
 
 				// There is no longer an active deadline. The expiry is set to positive
 				// infinity so that the actor takes no action until a new deadline is set.
