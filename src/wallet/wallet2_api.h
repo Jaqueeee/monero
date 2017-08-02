@@ -275,7 +275,8 @@ struct Wallet
     enum Status {
         Status_Ok,
         Status_Error,
-        Status_Critical
+        Status_Critical,
+        Status_Invalid_Password
     };
 
     enum ConnectionStatus {

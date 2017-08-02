@@ -499,8 +499,12 @@ bool WalletImpl::open(const std::string &path, const std::string &password)
         m_wallet->load(path, password);
 
         m_password = password;
+    } catch (const tools::error::invalid_password &e) {
+        MERROR("Error opening wallet: " << e.what());
+        m_status = Status_Invalid_Password;
+        m_errorString = e.what();
     } catch (const std::exception &e) {
-        LOG_ERROR("Error opening wallet: " << e.what());
+        MERROR("Error opening wallet: " << e.what());
         m_status = Status_Critical;
         m_errorString = e.what();
     }
@@ -546,7 +550,7 @@ bool WalletImpl::close()
     try {
         // Do not store wallet with invalid status
         // Status Critical refers to errors on opening or creating wallets.
-        if (status() != Status_Critical)
+        if (status() != Status_Critical && status() != Status_Invalid_Password)
             m_wallet->store();
         else
             LOG_ERROR("Status_Critical - not storing wallet");
