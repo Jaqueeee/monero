@@ -2420,6 +2420,12 @@ bool wallet2::check_connection(uint32_t *version, uint32_t timeout)
 
   boost::lock_guard<boost::mutex> lock(m_daemon_rpc_mutex);
 
+  // TODO: Add light wallet version check.
+  if(m_light_wallet) {
+      version = 0;
+      return m_light_wallet_connected;
+  }
+
   if(!m_http_client.is_connected())
   {
     m_node_rpc_proxy.invalidate();
@@ -2671,6 +2677,8 @@ void wallet2::store_to(const std::string &path, const std::string &password)
 uint64_t wallet2::unlocked_balance() const
 {
   uint64_t amount = 0;
+  if(m_light_wallet)
+    return m_light_wallet_unlocked_balance;
   for(const transfer_details& td: m_transfers)
     if(!td.m_spent && is_transfer_unlocked(td))
       amount += td.amount();
@@ -2681,6 +2689,8 @@ uint64_t wallet2::unlocked_balance() const
 uint64_t wallet2::balance() const
 {
   uint64_t amount = 0;
+  if(m_light_wallet)
+    return m_light_wallet_balance;
   for(auto& td: m_transfers)
     if(!td.m_spent)
       amount += td.amount();
@@ -3476,6 +3486,8 @@ uint64_t wallet2::get_dynamic_per_kb_fee_estimate()
 //----------------------------------------------------------------------------------------------------
 uint64_t wallet2::get_per_kb_fee()
 {
+  if(m_light_wallet)
+    return m_light_wallet_per_kb_fee;
   bool use_dyn_fee = use_fork_rules(HF_VERSION_DYNAMIC_FEE, -720 * 1);
   if (!use_dyn_fee)
     return FEE_PER_KB;
@@ -5249,6 +5261,9 @@ void wallet2::get_hard_fork_info(uint8_t version, uint64_t &earliest_height)
 //----------------------------------------------------------------------------------------------------
 bool wallet2::use_fork_rules(uint8_t version, int64_t early_blocks)
 {
+  // TODO: How to get fork rule info from light wallet node?
+  if(m_light_wallet)
+    return true;
   uint64_t height, earliest_height;
   boost::optional<std::string> result = m_node_rpc_proxy.get_height(height);
   throw_on_rpc_response_error(result, "get_info");
