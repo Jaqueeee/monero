@@ -178,6 +178,13 @@ namespace tools
       uint64_t m_timestamp;
     };
 
+    struct address_tx : payment_details
+    {
+      uint64_t m_coinbase;
+      uint64_t m_mempool;
+      bool m_incoming;
+    };
+
     struct unconfirmed_transfer_details
     {
       cryptonote::transaction_prefix m_tx;
@@ -361,6 +368,15 @@ namespace tools
      * \brief Checks if deterministic wallet
      */
     bool is_deterministic() const;
+
+    /*!
+    * \brief Checks if light wallet. A light wallet sends view key to a server where the blockchain is scanned.
+    */
+    bool light_wallet() const { return m_light_wallet; }
+    void set_light_wallet(bool light_wallet) { m_light_wallet = light_wallet; }
+    uint64_t get_light_wallet_scanned_block_height() const { return m_light_wallet_scanned_block_height; }
+    uint64_t get_light_wallet_blockchain_height() const { return m_light_wallet_blockchain_height; }
+
     bool get_seed(std::string& electrum_words) const;
     /*!
      * \brief Gets the seed language
@@ -598,6 +614,24 @@ namespace tools
     bool parse_uri(const std::string &uri, std::string &address, std::string &payment_id, uint64_t &amount, std::string &tx_description, std::string &recipient_name, std::vector<std::string> &unknown_parameters, std::string &error);
 
     uint64_t get_blockchain_height_by_date(uint16_t year, uint8_t month, uint8_t day);    // 1<=month<=12, 1<=day<=31
+
+    // Light wallet specific functions
+    // fetch unspent outs from lw node and store in m_transfers
+    void light_wallet_get_unspent_outs();
+    // fetch txs and store in m_payments
+    void light_wallet_get_address_txs();
+    // get_address_info
+    bool light_wallet_get_address_info(cryptonote::COMMAND_RPC_GET_ADDRESS_INFO::response &response);
+    // Login. new_address is true if address hasn't been used on lw node before.
+    bool light_wallet_login(bool &new_address);
+    // Send an import request to lw node. returns info about import fee, address and payment_id
+    bool light_wallet_import_wallet_request(cryptonote::COMMAND_RPC_IMPORT_WALLET_REQUEST::response &response);
+    // get random outputs from light wallet server
+    void light_wallet_get_outs(std::vector<std::vector<get_outs_entry>> &outs, const std::list<size_t> &selected_transfers, size_t fake_outputs_count);
+    // Parse rct string
+    bool light_wallet_parse_rct_str(const std::string& rct_string, const crypto::public_key& tx_pub_key, uint64_t internal_output_index, rct::key& decrypted_mask, rct::key& rct_commit, bool decrypt) const;
+    // check if key image is ours
+    bool light_wallet_key_image_is_ours(const crypto::key_image& key_image, const crypto::public_key& tx_public_key, uint64_t out_index);
 
   private:
     /*!
