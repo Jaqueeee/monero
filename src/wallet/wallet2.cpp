@@ -4988,20 +4988,16 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
   // the destination, and one for change.
   LOG_PRINT_L2("checking preferred");
   std::vector<size_t> prefered_inputs;
-  uint64_t rct_outs_needed = 2 * (fake_outs_count + 1);
-  rct_outs_needed += 100; // some fudge factor since we don't know how many are locked
-  if (use_rct && get_num_rct_outputs() >= rct_outs_needed)
+
+  // this is used to build a tx that's 1 or 2 inputs, and 2 outputs, which
+  // will get us a known fee.
+  uint64_t estimated_fee = calculate_fee(fee_per_kb, estimate_rct_tx_size(2, fake_outs_count + 1, 2), fee_multiplier);
+  prefered_inputs = pick_preferred_rct_inputs(needed_money + estimated_fee);
+  if (!prefered_inputs.empty())
   {
-    // this is used to build a tx that's 1 or 2 inputs, and 2 outputs, which
-    // will get us a known fee.
-    uint64_t estimated_fee = calculate_fee(fee_per_kb, estimate_rct_tx_size(2, fake_outs_count + 1, 2), fee_multiplier);
-    prefered_inputs = pick_preferred_rct_inputs(needed_money + estimated_fee);
-    if (!prefered_inputs.empty())
-    {
-      string s;
-      for (auto i: prefered_inputs) s += boost::lexical_cast<std::string>(i) + "(" + print_money(m_transfers[i].amount()) + ") ";
-      LOG_PRINT_L1("Found prefered rct inputs for rct tx: " << s);
-    }
+    string s;
+    for (auto i: prefered_inputs) s += boost::lexical_cast<std::string>(i) + "(" + print_money(m_transfers[i].amount()) + ") ";
+    LOG_PRINT_L1("Found prefered rct inputs for rct tx: " << s);
   }
   LOG_PRINT_L2("done checking preferred");
 
