@@ -131,7 +131,7 @@ void TransactionHistoryImpl::refresh()
         ti->m_hash      = string_tools::pod_to_hex(pd.m_tx_hash);
         ti->m_blockheight = pd.m_block_height;
         ti->m_timestamp = pd.m_timestamp;
-        ti->m_confirmations = wallet_height - pd.m_block_height;
+        ti->m_confirmations = (wallet_height > pd.m_block_height) ? wallet_height - pd.m_block_height : 0;
         ti->m_unlock_time = pd.m_unlock_time;
         m_history.push_back(ti);
 
@@ -171,7 +171,7 @@ void TransactionHistoryImpl::refresh()
         ti->m_hash = string_tools::pod_to_hex(hash);
         ti->m_blockheight = pd.m_block_height;
         ti->m_timestamp = pd.m_timestamp;
-        ti->m_confirmations = wallet_height - pd.m_block_height;
+        ti->m_confirmations = (wallet_height > pd.m_block_height) ? wallet_height - pd.m_block_height : 0;
 
         // single output transaction might contain multiple transfers
         for (const auto &d: pd.m_dests) {
