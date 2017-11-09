@@ -225,5 +225,6 @@ if (INSTALL_VENDORED_LIBUNBOUND)
         set(lib_folder lib)
     endif()
     install(TARGETS unbound
-        ARCHIVE DESTINATION ${lib_folder})
+        ARCHIVE DESTINATION ${lib_folder}
+        LIBRARY DESTINATION ${lib_folder})
 endif()
